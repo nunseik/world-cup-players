@@ -73,26 +73,29 @@ def issue_key(
     tier: str = "free",
     days: int | None = None,
     name: str | None = None,
+    verified: bool = False,
 ) -> tuple[str, datetime]:
     """Find-or-create the client for `email`, set its tier, and mint a key.
 
     Returns (plaintext_token, expires_at). The token is not stored anywhere in
     plaintext — surface it to the caller immediately and once. Writes; the caller
-    owns the transaction/commit.
+    owns the transaction/commit. `verified` is True for admin issuance and False
+    for self-serve signup; verification is monotonic (re-signup never un-verifies).
     """
     ttl_days = days if days is not None else settings.api_key_ttl_days
     expires_at = datetime.now(timezone.utc) + timedelta(days=ttl_days)
 
     client = conn.execute(
         """
-        insert into api_clients (email, name, tier)
-        values (%s, %s, %s)
+        insert into api_clients (email, name, tier, is_verified)
+        values (%s, %s, %s, %s)
         on conflict (email) do update set
             tier = excluded.tier,
-            name = coalesce(excluded.name, api_clients.name)
+            name = coalesce(excluded.name, api_clients.name),
+            is_verified = api_clients.is_verified or excluded.is_verified
         returning id
         """,
-        (email, name, tier),
+        (email, name, tier, verified),
     ).fetchone()
     client_id = client[0] if not isinstance(client, Mapping) else client["id"]
 
@@ -112,6 +115,15 @@ def set_tier(conn: Any, email: str, tier: str) -> bool:
     row = conn.execute(
         "update api_clients set tier = %s where email = %s returning id",
         (tier, email),
+    ).fetchone()
+    return row is not None
+
+
+def verify_client(conn: Any, email: str) -> bool:
+    """Mark a client verified (lifts the unverified limits). False if not found."""
+    row = conn.execute(
+        "update api_clients set is_verified = true where email = %s returning id",
+        (email,),
     ).fetchone()
     return row is not None
 

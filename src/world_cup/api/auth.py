@@ -30,6 +30,7 @@ class AuthContext(BaseModel):
     client_id: int
     key_id: int
     tier: str
+    is_verified: bool = False
 
 
 def extract_token(request: Request) -> str | None:
@@ -50,7 +51,7 @@ def get_api_client(request: Request, conn: Any = Depends(get_conn)) -> AuthConte
     row = conn.execute(
         """
         select k.id as key_id, k.expires_at, k.revoked_at,
-               c.id as client_id, c.tier, c.is_active
+               c.id as client_id, c.tier, c.is_active, c.is_verified
         from api_keys k
         join api_clients c on c.id = k.client_id
         where k.key_hash = %s
@@ -59,4 +60,7 @@ def get_api_client(request: Request, conn: Any = Depends(get_conn)) -> AuthConte
     ).fetchone()
     if row is None or not is_key_valid(row, datetime.now(timezone.utc)):
         raise _UNAUTHORIZED
-    return AuthContext(client_id=row["client_id"], key_id=row["key_id"], tier=row["tier"])
+    return AuthContext(
+        client_id=row["client_id"], key_id=row["key_id"],
+        tier=row["tier"], is_verified=row["is_verified"],
+    )
