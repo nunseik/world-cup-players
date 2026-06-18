@@ -20,6 +20,7 @@ def test_canonical_team_name_maps_source_aliases():
     # ESPN names resolve to FBref's canonical form (both normalized).
     assert canonical_team_name("South Korea") == canonical_team_name("Korea Republic")
     assert canonical_team_name("Iran") == canonical_team_name("IR Iran")
+    assert canonical_team_name("Republic of Ireland") == canonical_team_name("Rep. of Ireland")
     assert canonical_team_name("USA") == "united states"
     # Names with no alias pass straight through normalize_name.
     assert canonical_team_name("France") == "france"

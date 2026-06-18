@@ -31,6 +31,7 @@ _TEAM_ALIASES = {
     "china": "china pr",
     "usa": "united states",
     "ivory coast": "cote d'ivoire",
+    "republic of ireland": "rep. of ireland",  # ESPN spells it out; FBref abbreviates
 }
 
 
