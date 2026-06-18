@@ -76,6 +76,46 @@ uv run world-cup scrape --year 2022 --source fbref
 uv run world-cup scrape --year 2022 --source espn
 ```
 
+## API
+
+A read-only HTTP API (FastAPI) serves the loaded data. It's an optional install:
+
+```bash
+uv sync --extra api
+psql "$SUPABASE_DB_URL" -f supabase/migrations/0002_api.sql   # API tables (keys, rate limits)
+uv run world-cup-api --port 8000                              # add --reload for dev
+```
+
+Open `http://localhost:8000/docs` for interactive Swagger docs.
+
+**Auth — API keys.** Every `/v1` endpoint requires a key, sent as `X-API-Key: <token>`
+(or `Authorization: Bearer <token>`). Keys are **temporary** (default 30-day expiry) and
+tied to a tier (`free` / `premium`). Users get one via self-serve signup:
+
+```bash
+curl -XPOST localhost:8000/v1/signup -H 'content-type: application/json' \
+  -d '{"email":"you@example.com"}'        # returns a free key, shown once
+```
+
+Admins manage keys from the CLI (runs with DB credentials):
+
+```bash
+uv run world-cup api-key issue   --email you@example.com --tier premium
+uv run world-cup api-key upgrade --email you@example.com --tier premium
+uv run world-cup api-key revoke  --prefix wc_AbC12dEf
+uv run world-cup api-key list
+```
+
+**Rate limiting** is per-tier, per-minute (`free`=60, `premium`=600 by default), enforced
+with a Postgres fixed-window counter — no Redis. Over-limit requests get `429` +
+`Retry-After`; every response carries `X-RateLimit-Limit` / `-Remaining` headers.
+
+**Endpoints** (all under `/v1`): `tournaments`, `tournaments/{year}`,
+`tournaments/{year}/leaderboards/{scorers,assists}`, `players` (search by `q`/`position`/`team`),
+`players/{id}`, `players/{id}/career`, `teams`, `stats` (filter by `year`/`team`/`player_id`/
+`position`/`min_goals`, sortable). List endpoints return an offset-paginated
+`{items, total, limit, offset}` envelope.
+
 ## Layout
 
 | Path | Purpose |
@@ -87,7 +127,8 @@ uv run world-cup scrape --year 2022 --source espn
 | `src/world_cup/sources/espn.py` | Cross-check adapter — goals/assists leaderboards |
 | `src/world_cup/pipeline.py` | Scrape → merge → load orchestration |
 | `src/world_cup/tournaments.py` | Canonical WC editions 1970–2026 |
-| `supabase/migrations/` | Schema SQL |
+| `src/world_cup/api/` | Read-only HTTP API (FastAPI): keys, rate limits, queries, routers |
+| `supabase/migrations/` | Schema SQL (`0001` data, `0002` API) |
 
 ## Tests
 

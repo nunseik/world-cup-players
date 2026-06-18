@@ -39,9 +39,29 @@ class Settings(BaseSettings):
     scrape_cdp_url: str = ""  # e.g. http://localhost:9222
     scrape_user_data_dir: str = ".cache/cdp-chrome"  # dedicated profile for that Chrome
 
+    # --- API server ---------------------------------------------------------
+    # Optional separate DSN for the read path (defaults to supabase_db_url). Lets
+    # you point reads at a read replica / different pooler than the scraper writes.
+    api_read_only_db_url: str = ""
+    # psycopg_pool sizes. workers * api_pool_max must stay under Supabase's
+    # connection ceiling — prefer the Supabase session pooler DSN for the API.
+    api_pool_min: int = 2
+    api_pool_max: int = 10
+    # Per-minute request budgets by client tier (see api/limits.py).
+    api_rate_free: int = 60
+    api_rate_premium: int = 600
+    # Default lifetime (days) of a freshly issued key.
+    api_key_ttl_days: int = 30
+    # Signups allowed per client IP per hour (abuse guard on the public endpoint).
+    api_signup_per_hour: int = 5
+
     @property
     def user_agent(self) -> str:
         return self.scrape_user_agent or DEFAULT_USER_AGENT
+
+    def read_only_db_url(self) -> str:
+        """DSN for the API read path: api_read_only_db_url if set, else the main one."""
+        return self.api_read_only_db_url or self.require_db_url()
 
     def require_db_url(self) -> str:
         if not self.supabase_db_url:

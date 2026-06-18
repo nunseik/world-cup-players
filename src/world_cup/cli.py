@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import inspect
 import sys
 
 import structlog
@@ -106,6 +107,54 @@ async def _scrape(args: argparse.Namespace) -> int:
     return 0
 
 
+def _api_key(args: argparse.Namespace) -> int:
+    """Admin-only key management (issue / list / upgrade / revoke).
+
+    Runs with the operator's DB credentials. The public signup endpoint only
+    mints free keys; these commands cover what it can't (premium issue, tier
+    changes, revocation). Synchronous — main() handles non-coroutine handlers.
+    """
+    from .api import keys as keymod
+    from .db import Database
+
+    action = args.api_key_action
+    with Database() as db:
+        if action == "issue":
+            token, expires_at = keymod.issue_key(
+                db.conn, args.email, tier=args.tier, days=args.days, name=args.name
+            )
+            console.print(
+                f"[green]Issued {args.tier} key for {args.email}[/green] "
+                f"(expires {expires_at:%Y-%m-%d %H:%M UTC})"
+            )
+            console.print("[yellow]Store this token now — it will not be shown again:[/yellow]")
+            console.print(f"\n  {token}\n")
+        elif action == "upgrade":
+            if keymod.set_tier(db.conn, args.email, args.tier):
+                console.print(f"[green]{args.email} is now tier '{args.tier}'.[/green]")
+            else:
+                console.print(f"[red]No client found for {args.email}.[/red]")
+                return 1
+        elif action == "revoke":
+            n = keymod.revoke_key(db.conn, prefix=args.prefix, key_id=args.id)
+            console.print(f"[green]Revoked {n} key(s).[/green]" if n else "[yellow]No active key matched.[/yellow]")
+        elif action == "list":
+            rows = keymod.list_keys(db.conn, email=args.email)
+            table = Table(title=f"API keys ({len(rows)})")
+            for col in ("id", "prefix", "email", "tier", "active", "expires", "revoked", "last used"):
+                table.add_column(col)
+            for r in rows:
+                table.add_row(
+                    str(r["id"]), r["key_prefix"], r["email"], r["tier"],
+                    "yes" if r["is_active"] else "no",
+                    f"{r['expires_at']:%Y-%m-%d}" if r["expires_at"] else "",
+                    f"{r['revoked_at']:%Y-%m-%d}" if r["revoked_at"] else "",
+                    f"{r['last_used_at']:%Y-%m-%d}" if r["last_used_at"] else "",
+                )
+            console.print(table)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="world-cup", description="FIFA World Cup stats scraper")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -131,12 +180,39 @@ def build_parser() -> argparse.ArgumentParser:
     )
     browser.add_argument("--port", type=int, default=9222, help="DevTools port (default 9222)")
     browser.set_defaults(func=_browser)
+
+    api_key = sub.add_parser("api-key", help="Manage API keys (admin: issue/list/upgrade/revoke)")
+    key_sub = api_key.add_subparsers(dest="api_key_action", required=True)
+
+    issue = key_sub.add_parser("issue", help="Mint a key for an email (find-or-create the client)")
+    issue.add_argument("--email", required=True)
+    issue.add_argument("--tier", choices=("free", "premium"), default="free")
+    issue.add_argument("--days", type=int, default=None, help="Lifetime in days (default: config TTL)")
+    issue.add_argument("--name", default=None, help="Optional display name")
+
+    upgrade = key_sub.add_parser("upgrade", help="Change a client's tier")
+    upgrade.add_argument("--email", required=True)
+    upgrade.add_argument("--tier", choices=("free", "premium"), required=True)
+
+    revoke = key_sub.add_parser("revoke", help="Soft-revoke a key by prefix or id")
+    revoke_id = revoke.add_mutually_exclusive_group(required=True)
+    revoke_id.add_argument("--prefix", help="Key prefix (e.g. wc_AbC12dEf)")
+    revoke_id.add_argument("--id", type=int, help="Key id")
+
+    listp = key_sub.add_parser("list", help="List keys (optionally for one email)")
+    listp.add_argument("--email", default=None)
+
+    api_key.set_defaults(func=_api_key)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    return asyncio.run(args.func(args))
+    result = args.func(args)
+    # Scrape/browser handlers are coroutines; api-key handlers are sync.
+    if inspect.iscoroutine(result):
+        return asyncio.run(result)
+    return result
 
 
 if __name__ == "__main__":
