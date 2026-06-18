@@ -98,10 +98,14 @@ idempotent. Remaining:
   `Memphis`) — needs fuzzy/per-player name matching, deliberately not attempted (false-merge risk).
   Note `players` dedup is `(normalized_name, birth_date)` with null birth_date, so NULLs are
   distinct in Postgres — name-only rows never collapse either (documented in [db.py](src/world_cup/db.py)).
-- **Loader is slow** — ~5–8 min/year because `upsert_stat` does ~4 sequential round-trips per
-  player to the remote pooler. Batch the writes (multi-row upsert / `executemany`) before any
-  multi-year backfill.
-- Then: remaining modern years (1994–2018) + 2026, jersey numbers, and legacy (1970–1998) backfill
+- **Loader speed — fixed.** `upsert_stats_bulk` ([db.py](src/world_cup/db.py)) replaced the per-row
+  path with psycopg `executemany(returning=True)`, pipelined into a few round-trips. A year dropped
+  from ~5–8 min to ~20s (now dominated by the FBref fetch + 3s inter-page delays, not the write).
+  Player ids are mapped back **by position**, not natural key — two distinct same-named players with
+  null birth_date (e.g. both Carlos Sánchez in 2018) must keep separate rows. 2018 + 2022 load
+  loss-lessly (605 / 683). Re-running a year still duplicates players/stats (null-birth_date
+  identity), so truncate the data tables before a clean reload.
+- Then: remaining modern years (1994–2014) + 2026, jersey numbers, and legacy (1970–1998) backfill
   from FBref squad/lineup pages.
 
 Run git commits/pushes only when the user asks.

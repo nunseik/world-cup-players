@@ -11,7 +11,7 @@ from types import TracebackType
 import psycopg
 
 from .config import settings
-from .models import Player, PlayerTournamentStat, Team, Tournament, normalize_name
+from .models import Player, PlayerTournamentStat, Team, Tournament
 
 
 class Database:
@@ -74,49 +74,47 @@ class Database:
         ).fetchone()
         return row[0] if row else None
 
-    def upsert_team(self, team: Team) -> int:
-        row = self.conn.execute(
-            """
-            insert into teams (name, normalized_name, fifa_code, confederation)
-            values (%s, %s, %s, %s)
-            on conflict (normalized_name) do update set
-                name          = excluded.name,
-                fifa_code     = coalesce(excluded.fifa_code, teams.fifa_code),
-                confederation = coalesce(excluded.confederation, teams.confederation)
-            returning id
-            """,
-            (team.name, team.normalized_name, team.fifa_code, team.confederation),
-        ).fetchone()
-        assert row is not None
-        return row[0]
+    def upsert_stats_bulk(self, stats: list[PlayerTournamentStat]) -> int:
+        """Upsert one year's stats, batching round-trips with pipelined executemany.
 
-    def upsert_player(self, player: Player) -> int:
-        # Dedup on (normalized_name, birth_date). NULL birth_dates are distinct
-        # in Postgres, so a known birth_date can later split a name-only row; we
-        # accept that as best-effort identity (documented in the schema).
-        row = self.conn.execute(
-            """
-            insert into players (full_name, normalized_name, birth_date, position)
-            values (%s, %s, %s, %s)
-            on conflict (normalized_name, birth_date) do update set
-                full_name = excluded.full_name,
-                position  = coalesce(excluded.position, players.position)
-            returning id
-            """,
-            (player.full_name, normalize_name(player.full_name), player.birth_date, player.position),
-        ).fetchone()
-        assert row is not None
-        return row[0]
+        Replaces per-player synchronous round-trips (tournament lookup + player +
+        team + stat, ~4 each) with `executemany(returning=True)`, which psycopg
+        pipelines into a few network flushes — a ~700-row year drops from minutes
+        to seconds. Each row is still its own statement, so on-conflict semantics
+        (and the null-birth_date identity quirk) exactly match the former path.
 
-    def upsert_stat(self, stat: PlayerTournamentStat) -> None:
-        tournament_id = self.tournament_id(stat.year)
+        Mapping is by **position**, not by natural key: executemany returns ids in
+        input order, so two distinct players who share a name with null birth_date
+        (e.g. the two Carlos Sánchez in 2018) each keep their own row. Returns the
+        number of stat rows written.
+        """
+        if not stats:
+            return 0
+        years = {s.year for s in stats}
+        if len(years) != 1:
+            raise ValueError(f"upsert_stats_bulk expects a single year, got {sorted(years)}")
+        tournament_id = self.tournament_id(years.pop())
         if tournament_id is None:
             raise RuntimeError(
-                f"Tournament {stat.year} not seeded. Run seed_tournaments first."
+                f"Tournament {stats[0].year} not seeded. Run seed_tournaments first."
             )
-        player_id = self.upsert_player(stat.player)
-        team_id = self.upsert_team(stat.team) if stat.team else None
-        self.conn.execute(
+
+        # Teams dedup by normalized_name (a real conflict key); players do not —
+        # one row per stat, positionally mapped back to its stat below.
+        teams = list({s.team.normalized_name: s.team for s in stats if s.team}.values())
+        team_ids = self._bulk_upsert_teams(teams)
+        player_ids = self._bulk_upsert_players([s.player for s in stats])
+
+        params = [
+            (
+                player_ids[i],
+                team_ids.get(s.team.normalized_name) if s.team else None,
+                tournament_id, s.jersey_number, s.goals, s.assists, s.minutes_played,
+                s.fouls_committed, s.yellow_cards, s.red_cards, s.appearances, s.source,
+            )
+            for i, s in enumerate(stats)
+        ]
+        self.conn.cursor().executemany(
             """
             insert into player_tournament_stats (
                 player_id, team_id, tournament_id, jersey_number, goals, assists,
@@ -136,12 +134,60 @@ class Database:
                 source          = excluded.source,
                 scraped_at      = now()
             """,
-            (
-                player_id, team_id, tournament_id, stat.jersey_number, stat.goals,
-                stat.assists, stat.minutes_played, stat.fouls_committed,
-                stat.yellow_cards, stat.red_cards, stat.appearances, stat.source,
-            ),
+            params,
         )
+        return len(stats)
+
+    def _bulk_upsert_teams(self, teams: list[Team]) -> dict[str, int]:
+        """Upsert teams (unique by normalized_name); return {normalized_name: id}."""
+        if not teams:
+            return {}
+        ids = self._executemany_returning(
+            """
+            insert into teams (name, normalized_name, fifa_code, confederation)
+            values (%s, %s, %s, %s)
+            on conflict (normalized_name) do update set
+                name          = excluded.name,
+                fifa_code     = coalesce(excluded.fifa_code, teams.fifa_code),
+                confederation = coalesce(excluded.confederation, teams.confederation)
+            returning id
+            """,
+            [(t.name, t.normalized_name, t.fifa_code, t.confederation) for t in teams],
+        )
+        return {t.normalized_name: i for t, i in zip(teams, ids)}
+
+    def _bulk_upsert_players(self, players: list[Player]) -> list[int]:
+        """Upsert one row per player; return ids aligned to the input order.
+
+        NULL birth_dates are distinct in Postgres, so name-only rows never collapse
+        and re-running a year creates fresh rows — the documented best-effort
+        identity (see this module's header / CLAUDE.md).
+        """
+        if not players:
+            return []
+        return self._executemany_returning(
+            """
+            insert into players (full_name, normalized_name, birth_date, position)
+            values (%s, %s, %s, %s)
+            on conflict (normalized_name, birth_date) do update set
+                full_name = excluded.full_name,
+                position  = coalesce(excluded.position, players.position)
+            returning id
+            """,
+            [(p.full_name, p.normalized_name, p.birth_date, p.position) for p in players],
+        )
+
+    def _executemany_returning(self, query: str, params_seq: list[tuple]) -> list[int]:
+        """Run `query` once per param tuple (pipelined) and collect the single
+        returned id from each, in input order."""
+        cur = self.conn.cursor()
+        cur.executemany(query, params_seq, returning=True)
+        ids: list[int] = []
+        while True:
+            ids.extend(row[0] for row in cur.fetchall())
+            if not cur.nextset():
+                break
+        return ids
 
     # --- scrape_runs -------------------------------------------------------
 

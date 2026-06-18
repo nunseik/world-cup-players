@@ -99,9 +99,8 @@ async def run_year(
             stats = await scrape_year(
                 year, primary=primary, fallback=fallback, use_fallback=use_fallback
             )
-            for stat in stats:
-                db.upsert_stat(stat)
-            db.finish_run(run_id, status="success", records=len(stats))
+            written = db.upsert_stats_bulk(stats)
+            db.finish_run(run_id, status="success", records=written)
             return stats
         except Exception as exc:  # noqa: BLE001 - record then re-raise
             db.finish_run(run_id, status="error", records=0, error=str(exc))
