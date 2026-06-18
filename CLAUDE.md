@@ -88,12 +88,19 @@ Milestones 1–3 done (scaffold, parsers, CDP path). **2022 live-loaded to Supab
 raw-CDP path (FBref 680 + ESPN 82) — schema applied, tournaments seeded, loader verified
 idempotent. Remaining:
 
-- **Known bug — FBref/ESPN rows don't merge.** FBref team names carry a country-code prefix
-  (`frFrance`, `arArgentina`), so `merge_sources` (keyed on normalized player+team) never matches
-  ESPN's plain `France`. Result: zero merges, duplicate player rows (FBref minutes/fouls in one,
-  ESPN goals in another). Fix in the FBref parser: strip the leading squad-code prefix from team
-  names. Note `players` dedup is `(normalized_name, birth_date)` and birth_date is null, so NULLs
-  are distinct in Postgres — name-only rows never collapse either (documented in [db.py](src/world_cup/db.py)).
+- **Cross-source merge — fixed.** Two layers now make FBref and ESPN rows line up by team:
+  (1) `_team()` in [fbref.py](src/world_cup/sources/fbref.py) strips FBref's glued squad-code
+  prefix (`frFrance` → `France`); (2) `canonical_team_name` in [models.py](src/world_cup/models.py)
+  maps source name aliases to FBref's form (`South Korea` → `Korea Republic`, `Iran` → `IR Iran`,
+  …) and is the team component of both the merge key and the DB dedup key. 2022 now loads 683 rows
+  / 32 teams (was 762 / 55 with zero merges). **Residual:** ~3 rows still don't merge due to
+  *player-name* spelling differences across sources (`Yahia`/`Yahya`, ESPN `Memphis Depay` vs FBref
+  `Memphis`) — needs fuzzy/per-player name matching, deliberately not attempted (false-merge risk).
+  Note `players` dedup is `(normalized_name, birth_date)` with null birth_date, so NULLs are
+  distinct in Postgres — name-only rows never collapse either (documented in [db.py](src/world_cup/db.py)).
+- **Loader is slow** — ~5–8 min/year because `upsert_stat` does ~4 sequential round-trips per
+  player to the remote pooler. Batch the writes (multi-row upsert / `executemany`) before any
+  multi-year backfill.
 - Then: remaining modern years (1994–2018) + 2026, jersey numbers, and legacy (1970–1998) backfill
   from FBref squad/lineup pages.
 

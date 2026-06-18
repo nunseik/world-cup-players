@@ -13,7 +13,7 @@ from __future__ import annotations
 import structlog
 
 from .browser import Browser
-from .models import PlayerTournamentStat, normalize_name
+from .models import PlayerTournamentStat, canonical_team_name, normalize_name
 from .sources.base import Source
 from .sources.espn import EspnSource
 from .sources.fbref import FbrefSource
@@ -22,7 +22,7 @@ log = structlog.get_logger(__name__)
 
 
 def _key(stat: PlayerTournamentStat) -> tuple[str, str]:
-    team = normalize_name(stat.team.name) if stat.team else ""
+    team = canonical_team_name(stat.team.name) if stat.team else ""
     return (normalize_name(stat.player.full_name), team)
 
 

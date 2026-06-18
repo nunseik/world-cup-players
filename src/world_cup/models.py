@@ -18,6 +18,32 @@ def normalize_name(name: str) -> str:
     return " ".join(stripped.lower().split())
 
 
+# FBref and ESPN disagree on some national-team names. We canonicalize to FBref's
+# form (the primary source) so cross-source rows merge and each team is stored
+# once. Keys and values are both normalize_name() output (lowercase, accents
+# stripped). Verified against 2022 (Iran, South Korea); extend as later
+# tournaments surface more mismatches. An alias whose source name never appears
+# is simply inert, so extra entries are safe.
+_TEAM_ALIASES = {
+    "south korea": "korea republic",
+    "north korea": "korea dpr",
+    "iran": "ir iran",
+    "china": "china pr",
+    "usa": "united states",
+    "ivory coast": "cote d'ivoire",
+}
+
+
+def canonical_team_name(name: str) -> str:
+    """Normalized team name mapped to FBref's canonical form via the alias table.
+
+    Used as the team component of the cross-source merge key and the DB dedup key,
+    so e.g. ESPN's "South Korea" and FBref's "Korea Republic" resolve to one team.
+    """
+    normalized = normalize_name(name)
+    return _TEAM_ALIASES.get(normalized, normalized)
+
+
 class Tournament(BaseModel):
     year: int
     host_country: str | None = None
@@ -34,7 +60,7 @@ class Team(BaseModel):
 
     @property
     def normalized_name(self) -> str:
-        return normalize_name(self.name)
+        return canonical_team_name(self.name)
 
 
 class Player(BaseModel):

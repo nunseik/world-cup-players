@@ -14,6 +14,8 @@ a non-datacenter network.
 
 from __future__ import annotations
 
+import re
+
 import structlog
 from bs4 import BeautifulSoup
 
@@ -39,6 +41,19 @@ def _int(value: str | None) -> int | None:
 
 def _str(value: str | None) -> str | None:
     return value.strip() or None if value else None
+
+
+# FBref squad cells glue a lowercase country code onto the country name, because
+# the flag/code and the squad link are adjacent elements that collapse together
+# when we read cell text ("frFrance", "arArgentina", "engEngland", "wlsWales").
+# The code is the leading run of lowercase letters before the first uppercase.
+# Strip it so team names match ESPN's plain form ("France") when merging sources.
+_SQUAD_CODE_RE = re.compile(r"^[a-z]+\s*(?=[A-Z])")
+
+
+def _team(value: str | None) -> str | None:
+    name = _str(value)
+    return _SQUAD_CODE_RE.sub("", name, count=1) if name else None
 
 
 def parse_table(html: str, id_prefix: str) -> list[dict[str, str]]:
@@ -75,7 +90,7 @@ def parse_table(html: str, id_prefix: str) -> list[dict[str, str]]:
 
 
 def _row_to_stat(year: int, row: dict[str, str]) -> PlayerTournamentStat:
-    team_name = _str(row.get("team"))
+    team_name = _team(row.get("team"))
     return PlayerTournamentStat(
         year=year,
         player=Player(full_name=row["player"], position=_str(row.get("position"))),
@@ -107,7 +122,7 @@ def build_stats(standard_html: str, misc_html: str | None, year: int) -> list[Pl
     if misc_html:
         for row in parse_table(misc_html, "stats_misc"):
             fouls = _int(row.get("fouls"))
-            key = _key(row["player"], _str(row.get("team")))
+            key = _key(row["player"], _team(row.get("team")))
             if fouls is not None and key in by_key:
                 by_key[key] = by_key[key].model_copy(update={"fouls_committed": fouls})
 

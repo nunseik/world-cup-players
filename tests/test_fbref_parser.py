@@ -7,11 +7,30 @@ validation must be run from a non-datacenter network — FBref is Cloudflare-gat
 
 from pathlib import Path
 
-from world_cup.sources.fbref import build_stats, parse_table
+import pytest
+
+from world_cup.sources.fbref import _team, build_stats, parse_table
 
 FIXTURES = Path(__file__).parent / "fixtures"
 STANDARD = (FIXTURES / "fbref_standard_sample.html").read_text()
 MISC = (FIXTURES / "fbref_misc_sample.html").read_text()
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("arArgentina", "Argentina"),   # 2-letter code, glued
+        ("frFrance", "France"),
+        ("engEngland", "England"),       # 3-letter code
+        ("wlsWales", "Wales"),
+        ("krKorea Republic", "Korea Republic"),  # multi-word name preserved
+        ("ci Côte d'Ivoire", "Côte d'Ivoire"),   # spaced code + accents
+        ("Brazil", "Brazil"),            # no code (older pages) — passthrough
+        (None, None),
+    ],
+)
+def test_team_strips_squad_code_prefix(raw, expected):
+    assert _team(raw) == expected
 
 
 def test_parse_table_skips_repeated_header_rows():
