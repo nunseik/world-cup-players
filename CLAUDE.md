@@ -6,8 +6,9 @@ Guidance for Claude Code working in this repo. See [README.md](README.md) for us
 
 A headless scraper for **FIFA World Cup player stats** (1970–present) that loads into a
 **Supabase/Postgres** database, at **tournament-totals granularity** (one row per player per
-World Cup). An API will be built on top later, so the schema and loader are kept clean,
-idempotent, and re-runnable.
+World Cup), **plus a read-only HTTP API** (FastAPI) on top of that database. The schema and
+loader are kept clean, idempotent, and re-runnable; the API is a separate optional layer (see
+**API** below).
 
 ## Data sources (important — non-obvious history)
 
@@ -61,7 +62,48 @@ ESPN is **not** Cloudflare-gated and uses the normal patchright-launched browser
 - [pipeline.py](src/world_cup/pipeline.py) — per year: primary → fallback `merge_fill` (by
   normalized player+team) → upsert → record a `scrape_runs` row.
 - [tournaments.py](src/world_cup/tournaments.py) — canonical WC editions 1970–2026.
-- [supabase/migrations/0001_init.sql](supabase/migrations/0001_init.sql) — schema.
+- [supabase/migrations/0001_init.sql](supabase/migrations/0001_init.sql) — data schema;
+  [0002_api.sql](supabase/migrations/0002_api.sql) — API tables (`api_clients`, `api_keys`,
+  `api_rate_counters`, `api_signup_counters`).
+- [api/](src/world_cup/api/) — the read API (see **API** below). Separate from the scraper;
+  shares config/models but never the `Database` class.
+
+## API (read layer)
+
+Optional FastAPI app under [api/](src/world_cup/api/), installed via the `api` extra
+(`uv sync --extra api`) and launched with `world-cup-api` (uvicorn). Read-only public
+endpoints over the stats DB; **all `/v1` routes require an API key** (`X-API-Key` or
+`Authorization: Bearer`). Keys are temporary (30-day default), tied to a tier (`free`/
+`premium`) with **per-minute Postgres fixed-window rate limiting** (no Redis).
+
+Non-obvious design points:
+- **Two connection pools** ([api/db.py](src/world_cup/api/db.py)): a `read_only` pool for the
+  data endpoints (so the public path physically cannot write) and a small writable pool used
+  **only** for auth/rate-limit bookkeeping (`api_keys.last_used_at`, the rate counters, signup
+  inserts). Both come from `SUPABASE_DB_URL`.
+- **Query functions are pure** ([api/queries.py](src/world_cup/api/queries.py)) — take a
+  connection, return response models; unit-tested with fake connections (see
+  `tests/conftest.py`), so the suite stays offline like the parser tests. Sorting is
+  whitelisted; never interpolate user input as SQL.
+- **Response schemas** ([api/schemas.py](src/world_cup/api/schemas.py)) are flat and separate
+  from the scraper domain models — keep them decoupled so scraper internals don't leak.
+- **Keys are stored as SHA-256 hashes, never plaintext** ([api/keys.py](src/world_cup/api/keys.py));
+  `keys.py` is shared by both the public `POST /v1/signup` and the admin CLI
+  (`world-cup api-key issue/list/upgrade/revoke`). Signup is IP-rate-limited (no email
+  verification yet — the known weak spot; next milestone).
+
+### Deployment (operational — not in the repo)
+
+Live at **`http://136.248.99.64`** on the user's **Oracle Cloud VM** (Ubuntu 24.04, ~950MB RAM).
+SSH `ubuntu@136.248.99.64` with `ssh-keys/ssh-key-2026-03-05.key` (gitignored).
+- Code at `/opt/world-cup-players`; runs as systemd unit `world-cup-api.service`
+  (`uv run world-cup-api --host 127.0.0.1 --port 8000 --workers 2`).
+- **Caddy** (system service, `/etc/caddy/Caddyfile`) reverse-proxies `:80 → :8000`, **HTTP only**
+  (no domain/TLS yet — add a domain + Caddy auto-TLS for HTTPS).
+- **The VM uses a scoped DB role `wc_api`, NOT the superuser** — SELECT on data tables,
+  read/write only on `api_*` tables, no DDL. Its DSN is the only credential on the box
+  (`/opt/world-cup-players/.env.local`, chmod 600); the superuser DSN stays on the local machine.
+- Redeploy: `git -C /opt/world-cup-players pull && uv sync --extra api && sudo systemctl restart world-cup-api`.
 
 ## Conventions
 
@@ -84,6 +126,12 @@ uv run world-cup browser                  # launch real Chrome for FBref
 uv run world-cup scrape --year 2022 --cdp # FBref via attached Chrome
 psql "$SUPABASE_DB_URL" -f supabase/migrations/0001_init.sql   # apply schema
 uv run python scripts/seed_tournaments.py # seed tournaments table
+
+# API
+uv sync --extra api                       # install API deps (FastAPI/uvicorn/psycopg-pool)
+psql "$SUPABASE_DB_URL" -f supabase/migrations/0002_api.sql    # apply API tables
+uv run world-cup-api --port 8000          # serve locally (http://localhost:8000/docs)
+uv run world-cup api-key issue --email x@y.com --tier premium # admin: mint a key
 ```
 
 ## Status / next
@@ -111,5 +159,11 @@ idempotent. Remaining:
   identity), so truncate the data tables before a clean reload.
 - Then: remaining modern years (1994–2014) + 2026, jersey numbers, and legacy (1970–1998) backfill
   from FBref squad/lineup pages.
+
+**API — built and deployed.** Read-only FastAPI layer with API-key auth + tiered rate limiting
+(see **API** above), live on the Oracle VM behind Caddy on HTTP. Next on the API:
+- **Signup email verification** — `POST /v1/signup` currently issues a key to any email with only
+  an IP rate-limit guarding it (no proof of ownership). This is the immediate next milestone.
+- Later: HTTPS (needs a domain), `last_used_at` write-throttling, rate-counter cleanup job.
 
 Run git commits/pushes only when the user asks.
