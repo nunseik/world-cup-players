@@ -17,8 +17,12 @@ idempotent, and re-runnable.
   player level — no minutes, fouls, or jersey numbers (Discipline is team-level). It was
   evaluated as primary and rejected for this reason.
 - **Jersey numbers** aren't in either source's aggregate tables — left null (deferred).
-- **Minutes/fouls don't exist for 1970s–1990s** tournaments; those rows are sparse by design
-  (all stat columns are nullable).
+- **Stat coverage thins out for older tournaments** — rows are sparse by design (all stat columns
+  nullable). Observed on FBref: **fouls (and the other detailed misc stats — tackles, interceptions,
+  crosses, offsides, pens) begin at 2018**; 2014 and earlier expose only basic discipline
+  (yellow/red cards, own goals) in the misc table, though minutes/goals/assists still go back
+  further. Each load logs `fbref.fetched … with_fouls=N`, so `with_fouls=0` with no
+  `fbref.misc_unavailable` warning means the data is genuinely absent (not a failed fetch).
 
 ## FBref + Cloudflare (critical constraint)
 

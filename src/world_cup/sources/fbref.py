@@ -147,5 +147,9 @@ class FbrefSource(Source):
             log.warning("fbref.misc_unavailable", year=year, error=str(exc))
 
         stats = build_stats(standard_html, misc_html, year)
-        log.info("fbref.fetched", year=year, players=len(stats))
+        # Surface fouls coverage so an absent-data year (FBref has no fouls before
+        # 2018) is visible and distinguishable from a silent misc-fetch failure
+        # (which also logs fbref.misc_unavailable above).
+        with_fouls = sum(1 for s in stats if s.fouls_committed is not None)
+        log.info("fbref.fetched", year=year, players=len(stats), with_fouls=with_fouls)
         return stats
