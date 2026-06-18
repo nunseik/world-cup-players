@@ -32,6 +32,7 @@ _TEAM_ALIASES = {
     "usa": "united states",
     "ivory coast": "cote d'ivoire",
     "republic of ireland": "rep. of ireland",  # ESPN spells it out; FBref abbreviates
+    "bosnia-herzegovina": "bosnia & herz.",     # ESPN hyphenates; FBref abbreviates
 }
 
 
