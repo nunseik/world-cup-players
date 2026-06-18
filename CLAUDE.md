@@ -29,8 +29,16 @@ Do **not** try to make a launched/headless browser pass FBref; it will not work.
 The working path is **CDP attach to a Chrome the user launches themselves**:
 - `world-cup browser` launches the *system* Chrome (not via Playwright) with
   `--remote-debugging-port=9222` and a dedicated profile (`.cache/cdp-chrome`).
-- `world-cup scrape --cdp` uses `connect_over_cdp` to drive that genuine browser.
-- We never close the user's browser on exit ([browser.py](src/world_cup/browser.py)).
+- `world-cup scrape --cdp` drives that genuine browser over a **hand-rolled raw-CDP
+  client** (`_CDPClient` in [browser.py](src/world_cup/browser.py)) — a thin
+  WebSocket talker for CDP protocol 1.3. We do **not** use patchright's
+  `connect_over_cdp`: its connect handshake issues a browser-level
+  `Browser.setDownloadBehavior` that Chrome 149+ rejects with *"Browser context
+  management is not supported"*, aborting the attach before any page loads. Raw CDP
+  speaks only `Target`/`Page`/`Runtime` (`get_html` is all the scraper needs), so
+  it's immune to that version drift. patchright remains the driver for the
+  launched (ESPN) path.
+- We never close the user's browser on exit.
 
 ESPN is **not** Cloudflare-gated and uses the normal patchright-launched browser.
 
@@ -41,7 +49,8 @@ ESPN is **not** Cloudflare-gated and uses the normal patchright-launched browser
 - [db.py](src/world_cup/db.py) — psycopg upserts. **Every write is an upsert on a natural key**, so
   re-running a year is safe. `coalesce(excluded.x, table.x)` means a later source fills nulls
   without clobbering existing values.
-- [browser.py](src/world_cup/browser.py) — CDP-attach OR launch (patchright). Cloudflare-aware.
+- [browser.py](src/world_cup/browser.py) — raw-CDP attach (`_CDPClient`, via `websockets`) OR
+  launch (patchright). Cloudflare-aware. Both expose just `get_html(url, wait_for=...)`.
 - [sources/](src/world_cup/sources/) — pluggable adapters implementing `Source.fetch_stats`.
   Parsers are **pure functions** (`build_stats`, `parse_leaderboards`) so they're unit-tested
   against fixtures with no browser/network.
@@ -75,6 +84,17 @@ uv run python scripts/seed_tournaments.py # seed tournaments table
 
 ## Status / next
 
-Milestones 1–3 done (scaffold, parsers, CDP path). Remaining: live multi-year FBref load to
-Supabase, then jersey numbers + legacy (1970–1998) backfill from FBref squad/lineup pages.
+Milestones 1–3 done (scaffold, parsers, CDP path). **2022 live-loaded to Supabase** via the
+raw-CDP path (FBref 680 + ESPN 82) — schema applied, tournaments seeded, loader verified
+idempotent. Remaining:
+
+- **Known bug — FBref/ESPN rows don't merge.** FBref team names carry a country-code prefix
+  (`frFrance`, `arArgentina`), so `merge_sources` (keyed on normalized player+team) never matches
+  ESPN's plain `France`. Result: zero merges, duplicate player rows (FBref minutes/fouls in one,
+  ESPN goals in another). Fix in the FBref parser: strip the leading squad-code prefix from team
+  names. Note `players` dedup is `(normalized_name, birth_date)` and birth_date is null, so NULLs
+  are distinct in Postgres — name-only rows never collapse either (documented in [db.py](src/world_cup/db.py)).
+- Then: remaining modern years (1994–2018) + 2026, jersey numbers, and legacy (1970–1998) backfill
+  from FBref squad/lineup pages.
+
 Run git commits/pushes only when the user asks.

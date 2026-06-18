@@ -5,7 +5,7 @@ description = "Headless scraper for FIFA World Cup player stats (1970-present) i
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "patchright>=1.49",        # undetected Playwright drop-in (Cloudflare-protected FBref)
+    "patchright>=1.49", # undetected Playwright drop-in (Cloudflare-protected FBref)
     "psycopg[binary]>=3.2",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
@@ -13,7 +13,8 @@ dependencies = [
     "tenacity>=9.0",
     "structlog>=24.4",
     "rich>=13.9",
-    "beautifulsoup4>=4.12",    # HTML table parsing (pure-Python, testable against fixtures)
+    "beautifulsoup4>=4.12", # HTML table parsing (pure-Python, testable against fixtures)
+    "websockets>=16.0",
 ]
 
 [project.scripts]
