@@ -48,6 +48,7 @@ class FakeState:
 
     key_valid: bool = True
     tier: str = "free"
+    verified: bool = True                    # default: a verified client (lifts unverified caps)
     rate_count: int = 1                      # value the counter upsert "returns"
     signup_count: int = 1                    # value the signup counter "returns"
     tournaments: list = field(default_factory=list)
@@ -66,6 +67,7 @@ def _read_router(state: FakeState):
             return [{
                 "key_id": 1, "expires_at": _future(), "revoked_at": None,
                 "client_id": 1, "tier": state.tier, "is_active": True,
+                "is_verified": state.verified,
             }]
         if "count(" in s:
             return [{"count": len(state.tournaments) if "tournaments" in s else 0}]

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from .. import queries
 from ..db import get_conn
+from ..pagination import PageParams, page_params
 from ..rate_limit import rate_limit
 from ..schemas import CareerAggregateOut, Page, PlayerOut
 
@@ -19,12 +20,11 @@ def list_players(
     q: str | None = Query(None, description="Name search (accent/case-insensitive)"),
     position: str | None = None,
     team: str | None = Query(None, description="Team name (aliases canonicalized)"),
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    page: PageParams = Depends(page_params),
     conn: Any = Depends(get_conn),
 ) -> Page[PlayerOut]:
     return queries.list_players(
-        conn, q=q, position=position, team=team, limit=limit, offset=offset
+        conn, q=q, position=position, team=team, limit=page.limit, offset=page.offset
     )
 
 

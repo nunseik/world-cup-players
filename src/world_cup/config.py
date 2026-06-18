@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     # Per-minute request budgets by client tier (see api/limits.py).
     api_rate_free: int = 60
     api_rate_premium: int = 600
+    # Unverified clients (no email verification yet) are capped hard, regardless
+    # of tier: a low request rate and a small max page size.
+    api_rate_unverified: int = 10
+    api_max_page: int = 200            # verified ceiling on rows per call
+    api_max_page_unverified: int = 25  # unverified ceiling on rows per call
     # Default lifetime (days) of a freshly issued key.
     api_key_ttl_days: int = 30
     # Signups allowed per client IP per hour (abuse guard on the public endpoint).

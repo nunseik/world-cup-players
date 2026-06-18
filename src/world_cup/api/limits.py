@@ -19,3 +19,18 @@ TIER_LIMITS: dict[str, int] = {
 def limit_for_tier(tier: str) -> int:
     """Per-minute request budget for a tier (free budget if the tier is unknown)."""
     return TIER_LIMITS.get(tier, settings.api_rate_free)
+
+
+def effective_rate_limit(tier: str, is_verified: bool) -> int:
+    """Per-minute budget after applying the unverified cap.
+
+    Unverified clients are held to the (low) unverified rate even if their tier
+    would allow more — until email verification exists, signups can't be trusted.
+    """
+    base = limit_for_tier(tier)
+    return base if is_verified else min(base, settings.api_rate_unverified)
+
+
+def max_page_size(is_verified: bool) -> int:
+    """Largest page (rows per call) a client may request, per verification status."""
+    return settings.api_max_page if is_verified else settings.api_max_page_unverified

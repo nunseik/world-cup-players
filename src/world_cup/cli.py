@@ -120,15 +120,24 @@ def _api_key(args: argparse.Namespace) -> int:
     action = args.api_key_action
     with Database() as db:
         if action == "issue":
+            # Admin issuance is trusted, so the client is marked verified
+            # (lifts the unverified rate/page caps).
             token, expires_at = keymod.issue_key(
-                db.conn, args.email, tier=args.tier, days=args.days, name=args.name
+                db.conn, args.email, tier=args.tier, days=args.days, name=args.name,
+                verified=True,
             )
             console.print(
                 f"[green]Issued {args.tier} key for {args.email}[/green] "
-                f"(expires {expires_at:%Y-%m-%d %H:%M UTC})"
+                f"(verified; expires {expires_at:%Y-%m-%d %H:%M UTC})"
             )
             console.print("[yellow]Store this token now — it will not be shown again:[/yellow]")
             console.print(f"\n  {token}\n")
+        elif action == "verify":
+            if keymod.verify_client(db.conn, args.email):
+                console.print(f"[green]{args.email} is now verified.[/green]")
+            else:
+                console.print(f"[red]No client found for {args.email}.[/red]")
+                return 1
         elif action == "upgrade":
             if keymod.set_tier(db.conn, args.email, args.tier):
                 console.print(f"[green]{args.email} is now tier '{args.tier}'.[/green]")
@@ -193,6 +202,9 @@ def build_parser() -> argparse.ArgumentParser:
     upgrade = key_sub.add_parser("upgrade", help="Change a client's tier")
     upgrade.add_argument("--email", required=True)
     upgrade.add_argument("--tier", choices=("free", "premium"), required=True)
+
+    verify = key_sub.add_parser("verify", help="Mark a client verified (lifts unverified limits)")
+    verify.add_argument("--email", required=True)
 
     revoke = key_sub.add_parser("revoke", help="Soft-revoke a key by prefix or id")
     revoke_id = revoke.add_mutually_exclusive_group(required=True)

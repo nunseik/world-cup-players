@@ -19,7 +19,7 @@ from fastapi import Depends, HTTPException, Request, Response, status
 from ..config import settings
 from .auth import AuthContext, get_api_client
 from .db import get_writable
-from .limits import limit_for_tier
+from .limits import effective_rate_limit
 
 
 def decide(count: int, limit: int) -> bool:
@@ -42,8 +42,8 @@ def rate_limit(
     auth: AuthContext = Depends(get_api_client),
     conn: Any = Depends(get_writable),
 ) -> AuthContext:
-    """Per-tier per-minute limit. Also refreshes the key's last_used_at."""
-    limit = limit_for_tier(auth.tier)
+    """Per-tier per-minute limit (capped low for unverified). Refreshes last_used_at."""
+    limit = effective_rate_limit(auth.tier, auth.is_verified)
     row = conn.execute(
         """
         insert into api_rate_counters (key_id, window_start, count)
