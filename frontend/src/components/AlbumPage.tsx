@@ -460,9 +460,21 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
     return () => mediaQuery.removeEventListener('change', handleChange)
   }, [])
 
-  // Load persistence from localStorage
+  // Load persistence from localStorage or URL
   useEffect(() => {
     try {
+      // First check URL for shared collection
+      const params = new URLSearchParams(window.location.search)
+      const collectionParam = params.get('collection')
+      if (collectionParam) {
+        try {
+          const decoded = JSON.parse(atob(collectionParam))
+          setCollected(decoded.c || {})
+          setDuplicates(decoded.d || {})
+          return
+        } catch { /* invalid collection param, fall through */ }
+      }
+      // Fall back to localStorage
       const saved = localStorage.getItem('wc_album_v1')
       if (saved) {
         const { c, d } = JSON.parse(saved)
@@ -534,7 +546,24 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
   }
 
   function share() {
-    navigator.clipboard.writeText(window.location.href).catch(() => {})
+    // Encode collection state into URL
+    const encoded = btoa(JSON.stringify({ c: collected, d: duplicates }))
+    const url = new URL(window.location.href)
+    url.searchParams.set('collection', encoded)
+    const shareUrl = url.toString()
+
+    // Try Web Share API first (mobile native share)
+    if (navigator.share) {
+      navigator.share({
+        title: 'PANINI FAN ALBUM',
+        text: `Check out my World Cup sticker collection! ${collectedCount}/${total} stickers collected (${pct}%)`,
+        url: shareUrl,
+      }).catch(() => {})
+    } else {
+      // Fall back to clipboard
+      navigator.clipboard.writeText(shareUrl).catch(() => {})
+    }
+
     setShareToast(true)
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     toastTimerRef.current = setTimeout(() => setShareToast(false), 2200)
