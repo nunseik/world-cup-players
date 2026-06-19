@@ -27,10 +27,7 @@ echo "==> building frontend"
 if command -v npm &>/dev/null; then
   # Load VITE_* vars from .env.local (only VITE_ prefix — never exports DB creds)
   if [ -f "$APP_DIR/.env.local" ]; then
-    set -a
-    # shellcheck disable=SC1090
-    source <(grep '^VITE_' "$APP_DIR/.env.local")
-    set +a
+    export $(grep '^VITE_' "$APP_DIR/.env.local" | xargs)
   fi
   (cd "$APP_DIR/frontend" && npm ci --prefer-offline && npm run build)
   echo "    frontend built"
