@@ -229,7 +229,11 @@ ESPN's fixture is a real saved page; FBref's mirrors its documented `data-stat` 
 
 - [x] Milestone 1 — scaffold + schema
 - [x] Milestone 2 — ESPN parser (verified live) + FBref primary adapter (unit-tested)
-- [ ] Milestone 3 — live multi-year validation + DB load (needs unblocked network + `SUPABASE_DB_URL`)
+- [x] Milestone 3 — all 15 tournaments loaded (1970–2026), 7 505 rows in self-hosted Postgres on Oracle VM
+- [x] API — read-only FastAPI layer with key auth + tiered rate limiting, live at `http://136.248.99.64`
+- [x] 2026 auto-refresh — ESPN-only cron every 6 hours on the VM (FBref blocked by Cloudflare from Oracle IPs)
+- [ ] Signup email verification — `POST /v1/signup` is IP-rate-limited only; no email confirmation yet
+- [ ] HTTPS — needs a domain + Caddy auto-TLS
 - [ ] Milestone 4 — jersey numbers + legacy (1970–1998) backfill from FBref squad/lineup pages
 
 ## Known limitations
