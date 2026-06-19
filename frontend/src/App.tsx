@@ -13,7 +13,7 @@ export default function App() {
   const [view, setView] = useState<View>('album')
   const [tournaments, setTournaments] = useState<TournamentOut[]>([])
   const [filters, setFilters] = useState<StatsFilters>({
-    year: 2026,
+    year: 2022,
     sort: '-goals',
   })
   const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null)

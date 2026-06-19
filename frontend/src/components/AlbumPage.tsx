@@ -431,10 +431,14 @@ interface Props {
 export function AlbumPage({ initialYear, tournaments }: Props) {
   const [theme, setTheme] = useState<Theme>(() => {
     try {
-      return (localStorage.getItem('wc_album_theme') as Theme) || 'dark'
-    } catch {
-      return 'dark'
+      const saved = localStorage.getItem('wc_album_theme') as Theme | null
+      if (saved === 'light' || saved === 'dark') return saved
+    } catch { /* ignore */ }
+    // Auto-detect system preference
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
     }
+    return 'dark'
   })
   const [year, setYear] = useState(initialYear)
   const [stats, setStats] = useState<PlayerStatOut[]>([])
@@ -455,6 +459,20 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
       localStorage.setItem('wc_album_theme', theme)
     } catch { /* ignore */ }
   }, [theme])
+
+  // Listen for system theme preference changes
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const handleChange = (e: MediaQueryListEvent) => {
+      try {
+        const saved = localStorage.getItem('wc_album_theme')
+        if (!saved) setTheme(e.matches ? 'dark' : 'light')
+      } catch { /* ignore */ }
+    }
+    mediaQuery.addEventListener('change', handleChange)
+    return () => mediaQuery.removeEventListener('change', handleChange)
+  }, [])
 
   // Load persistence from localStorage
   useEffect(() => {
@@ -605,7 +623,6 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
             <div style={{ fontFamily: "'Roboto Mono',monospace", fontSize: 10, color: t.textMuted2, letterSpacing: 1.5, marginTop: 3 }}>STICKERS</div>
           </div>
           <button onClick={collectAll} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: t.button, color: t.text, fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'background-color .2s' }} onMouseOver={e => e.currentTarget.style.background = t.buttonHover} onMouseOut={e => e.currentTarget.style.background = t.button}>Collect all</button>
-          <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: t.button, color: t.text, fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'background-color .2s' }} onMouseOver={e => e.currentTarget.style.background = t.buttonHover} onMouseOut={e => e.currentTarget.style.background = t.button}>{theme === 'dark' ? '☀️' : '🌙'}</button>
           <button onClick={share} style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: t.accent, color: '#0e1430', fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: `0 4px 0 ${t.accentDark}` }}>Share album</button>
         </div>
       </header>
