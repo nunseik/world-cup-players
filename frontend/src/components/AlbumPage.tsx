@@ -430,11 +430,7 @@ interface Props {
 
 export function AlbumPage({ initialYear, tournaments }: Props) {
   const [theme, setTheme] = useState<Theme>(() => {
-    try {
-      const saved = localStorage.getItem('wc_album_theme') as Theme | null
-      if (saved === 'light' || saved === 'dark') return saved
-    } catch { /* ignore */ }
-    // Auto-detect system preference
+    // Always detect system preference, never use localStorage (no manual theme toggle)
     if (typeof window !== 'undefined' && window.matchMedia) {
       return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
     }
@@ -453,22 +449,12 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
 
   const t = THEMES[theme]
 
-  // Persist theme
-  useEffect(() => {
-    try {
-      localStorage.setItem('wc_album_theme', theme)
-    } catch { /* ignore */ }
-  }, [theme])
-
   // Listen for system theme preference changes
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const handleChange = (e: MediaQueryListEvent) => {
-      try {
-        const saved = localStorage.getItem('wc_album_theme')
-        if (!saved) setTheme(e.matches ? 'dark' : 'light')
-      } catch { /* ignore */ }
+      setTheme(e.matches ? 'dark' : 'light')
     }
     mediaQuery.addEventListener('change', handleChange)
     return () => mediaQuery.removeEventListener('change', handleChange)
