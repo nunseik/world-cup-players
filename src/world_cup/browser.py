@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 import urllib.request
 from pathlib import Path
 from types import TracebackType
@@ -206,6 +207,10 @@ class Browser:
             kwargs["channel"] = settings.scrape_browser_channel
         if settings.scrape_user_agent:
             kwargs["user_agent"] = settings.scrape_user_agent
+        # Chrome won't start inside a VM/container without a user namespace unless
+        # --no-sandbox is passed. Safe here: the browser only scrapes public pages.
+        if sys.platform == "linux":
+            kwargs["args"] = ["--no-sandbox", "--disable-dev-shm-usage"]
         self._context = await self._pw.chromium.launch_persistent_context(**kwargs)
         await self._context.route("**/*", self._maybe_block)
 
