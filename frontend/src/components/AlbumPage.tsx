@@ -2,6 +2,51 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import type { PlayerStatOut, TournamentOut } from '../types'
 
+// ─── Theme ────────────────────────────────────────────────────────────────────
+
+type Theme = 'light' | 'dark'
+
+const THEMES = {
+  dark: {
+    bg: '#0e1430',
+    bgAlt: '#0b1029',
+    bgAlt2: '#141c44',
+    text: '#fff',
+    textMuted: 'rgba(255,255,255,.5)',
+    textMuted2: 'rgba(255,255,255,.55)',
+    accent: '#f5c542',
+    accentDark: '#c79a1f',
+    card: '#fff',
+    cardText: '#0e1430',
+    cardBg: 'linear-gradient(160deg,#141c44,#0b1029)',
+    border: 'rgba(255,255,255,.06)',
+    button: 'rgba(255,255,255,.12)',
+    buttonHover: 'rgba(255,255,255,.15)',
+    overlay: 'rgba(8,11,28,.86)',
+    progress: 'linear-gradient(90deg,#3ad29f,#f5c542)',
+    progressBg: 'rgba(255,255,255,.08)',
+  },
+  light: {
+    bg: '#f9fafb',
+    bgAlt: '#f3f4f8',
+    bgAlt2: '#e5e7eb',
+    text: '#111827',
+    textMuted: 'rgba(17,24,39,.6)',
+    textMuted2: 'rgba(17,24,39,.55)',
+    accent: '#f5c542',
+    accentDark: '#c79a1f',
+    card: '#fff',
+    cardText: '#111827',
+    cardBg: 'linear-gradient(160deg,#ffffff,#f3f4f8)',
+    border: 'rgba(0,0,0,.06)',
+    button: 'rgba(0,0,0,.06)',
+    buttonHover: 'rgba(0,0,0,.08)',
+    overlay: 'rgba(248,249,250,.92)',
+    progress: 'linear-gradient(90deg,#3ad29f,#f5c542)',
+    progressBg: 'rgba(0,0,0,.08)',
+  },
+} as const
+
 // ─── Team metadata ───────────────────────────────────────────────────────────
 
 const TEAM_META: Record<string, { color: string; flag: string; abbr: string }> = {
@@ -116,6 +161,30 @@ function getAvatar(position: string | null): string {
   return '🧑'
 }
 
+const COUNTRY_ABBR: Record<string, string> = {
+  'United States': 'USA',
+  'United Kingdom': 'GBR',
+  'South Korea': 'KOR',
+  'North Korea': 'PRK',
+  'New Zealand': 'NZL',
+  'South Africa': 'RSA',
+  'Saudi Arabia': 'KSA',
+  'Costa Rica': 'CRC',
+  'United Arab Emirates': 'UAE',
+  'Trinidad and Tobago': 'TRI',
+  'Czech Republic': 'CZE',
+  'Republic of Ireland': 'IRL',
+  'Northern Ireland': 'NIR',
+}
+
+function formatHostCountries(countries: string | null): string {
+  if (!countries) return ''
+  return countries
+    .split(' / ')
+    .map(c => COUNTRY_ABBR[c] || c.substring(0, 3).toUpperCase())
+    .join('/')
+}
+
 // ─── Wikipedia photo cache ────────────────────────────────────────────────────
 
 const _photoCache = new Map<string, string | null>()
@@ -206,6 +275,7 @@ function StickerCard({
   collected,
   flipped,
   isDuplicate,
+  theme,
   onFlip,
   onCollect,
   onToggleDup,
@@ -216,12 +286,14 @@ function StickerCard({
   collected: boolean
   flipped: boolean
   isDuplicate: boolean
+  theme: Theme
   onFlip: () => void
   onCollect: () => void
   onToggleDup: (e: React.MouseEvent) => void
   onZoom: (e: React.MouseEvent) => void
 }) {
   const photoUrl = useWikiPhoto(stat.player_name)
+  const tt = THEMES[theme]
 
   function handleClick() {
     if (!collected) onCollect()
@@ -252,7 +324,7 @@ function StickerCard({
 
         {/* FRONT */}
         <div style={faceStyle}>
-          <div style={{ position: 'absolute', inset: 0, borderRadius: 13, background: '#fff' }} />
+          <div style={{ position: 'absolute', inset: 0, borderRadius: 13, background: tt.card }} />
 
           {/* Team banner */}
           <div style={{
@@ -275,7 +347,7 @@ function StickerCard({
           <div style={{
             position: 'absolute', top: 46, left: 8, right: 8, bottom: 54,
             borderRadius: 8,
-            background: 'repeating-linear-gradient(135deg,rgba(0,0,0,.04) 0 8px,rgba(0,0,0,.08) 8px 16px)',
+            background: theme === 'dark' ? 'repeating-linear-gradient(135deg,rgba(0,0,0,.04) 0 8px,rgba(0,0,0,.08) 8px 16px)' : 'repeating-linear-gradient(135deg,rgba(0,0,0,.02) 0 8px,rgba(0,0,0,.04) 8px 16px)',
             display: 'flex', alignItems: 'flex-end', justifyContent: 'center', overflow: 'hidden',
           }}>
             <PlayerPhoto url={photoUrl} position={stat.position} />
@@ -283,10 +355,10 @@ function StickerCard({
 
           {/* Name / position */}
           <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 54, padding: '0 12px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, color: '#0e1430', lineHeight: 1.05, letterSpacing: '-.2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, color: tt.cardText, lineHeight: 1.05, letterSpacing: '-.2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {stat.player_name}
             </div>
-            <div style={{ fontFamily: "'Roboto Mono',monospace", fontSize: 9, color: '#6b7280', letterSpacing: 1, marginTop: 3, textTransform: 'uppercase' }}>
+            <div style={{ fontFamily: "'Roboto Mono',monospace", fontSize: 9, color: theme === 'dark' ? '#6b7280' : '#9099aa', letterSpacing: 1, marginTop: 3, textTransform: 'uppercase' }}>
               {stat.position ?? '—'} · {stat.year}
             </div>
           </div>
@@ -298,16 +370,16 @@ function StickerCard({
 
           {/* Locked overlay */}
           {!collected && (
-            <div style={{ position: 'absolute', inset: 0, borderRadius: 13, background: 'rgba(14,20,48,.76)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, zIndex: 4 }}>
+            <div style={{ position: 'absolute', inset: 0, borderRadius: 13, background: theme === 'dark' ? 'rgba(14,20,48,.76)' : 'rgba(249,250,251,.88)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, zIndex: 4 }}>
               <span style={{ fontSize: 30 }}>🔒</span>
-              <span style={{ fontFamily: "'Roboto Mono',monospace", fontSize: 9, color: 'rgba(255,255,255,.7)', letterSpacing: 1.5 }}>CLICK TO COLLECT</span>
+              <span style={{ fontFamily: "'Roboto Mono',monospace", fontSize: 9, color: theme === 'dark' ? 'rgba(255,255,255,.7)' : 'rgba(17,24,39,.6)', letterSpacing: 1.5 }}>CLICK TO COLLECT</span>
             </div>
           )}
         </div>
 
         {/* BACK */}
         <div style={{ ...faceStyle, transform: 'rotateY(180deg)' }}>
-          <div style={{ position: 'absolute', inset: 0, borderRadius: 13, background: 'linear-gradient(160deg,#141c44,#0b1029)' }} />
+          <div style={{ position: 'absolute', inset: 0, borderRadius: 13, background: tt.cardBg }} />
 
           {/* Back header */}
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 40, background: teamMeta.color, borderRadius: '13px 13px 0 0', display: 'flex', alignItems: 'center', padding: '0 12px' }}>
@@ -319,12 +391,12 @@ function StickerCard({
             {[
               { label: 'Goals', value: stat.goals, color: '#f5c542' },
               { label: 'Assists', value: stat.assists, color: '#3ad29f' },
-              { label: 'Apps', value: stat.appearances, color: '#fff' },
-              { label: 'Minutes', value: stat.minutes_played, color: '#fff' },
+              { label: 'Apps', value: stat.appearances, color: theme === 'dark' ? '#fff' : '#111827' },
+              { label: 'Minutes', value: stat.minutes_played, color: theme === 'dark' ? '#fff' : '#111827' },
               { label: 'Yellow', value: stat.yellow_cards, color: '#e0a82e' },
             ].map(s => (
-              <div key={s.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 9px', borderRadius: 7, background: 'rgba(255,255,255,.06)' }}>
-                <span style={{ fontFamily: "'Roboto Mono',monospace", fontSize: 9, color: 'rgba(255,255,255,.55)', letterSpacing: 1, textTransform: 'uppercase' }}>{s.label}</span>
+              <div key={s.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 9px', borderRadius: 7, background: theme === 'dark' ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)' }}>
+                <span style={{ fontFamily: "'Roboto Mono',monospace", fontSize: 9, color: theme === 'dark' ? 'rgba(255,255,255,.55)' : 'rgba(17,24,39,.55)', letterSpacing: 1, textTransform: 'uppercase' }}>{s.label}</span>
                 <span style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 14, color: s.color }}>{s.value ?? '—'}</span>
               </div>
             ))}
@@ -334,13 +406,13 @@ function StickerCard({
           <div style={{ position: 'absolute', bottom: 10, left: 10, right: 10, display: 'flex', gap: 7 }}>
             <button
               onClick={onToggleDup}
-              style={{ flex: 1, padding: '7px 0', borderRadius: 7, border: 'none', fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 10, cursor: 'pointer', background: isDuplicate ? '#f5c542' : 'rgba(255,255,255,.12)', color: isDuplicate ? '#0e1430' : '#fff' }}
+              style={{ flex: 1, padding: '7px 0', borderRadius: 7, border: 'none', fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 10, cursor: 'pointer', background: isDuplicate ? '#f5c542' : tt.button, color: isDuplicate ? '#0e1430' : theme === 'dark' ? '#fff' : '#111827' }}
             >
               {isDuplicate ? '★ DUPLICATE' : 'MARK DUPE'}
             </button>
             <button
               onClick={onZoom}
-              style={{ padding: '7px 11px', borderRadius: 7, border: 'none', background: 'rgba(255,255,255,.12)', color: '#fff', fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 10, cursor: 'pointer' }}
+              style={{ padding: '7px 11px', borderRadius: 7, border: 'none', background: tt.button, color: theme === 'dark' ? '#fff' : '#111827', fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 10, cursor: 'pointer' }}
             >⤢</button>
           </div>
         </div>
@@ -358,6 +430,13 @@ interface Props {
 }
 
 export function AlbumPage({ initialYear, tournaments }: Props) {
+  const [theme, setTheme] = useState<Theme>(() => {
+    try {
+      return (localStorage.getItem('wc_album_theme') as Theme) || 'dark'
+    } catch {
+      return 'dark'
+    }
+  })
   const [year, setYear] = useState(initialYear)
   const [stats, setStats] = useState<PlayerStatOut[]>([])
   const [loading, setLoading] = useState(true)
@@ -368,6 +447,15 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
   const [zoomId, setZoomId] = useState<number | null>(null)
   const [shareToast, setShareToast] = useState(false)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const t = THEMES[theme]
+
+  // Persist theme
+  useEffect(() => {
+    try {
+      localStorage.setItem('wc_album_theme', theme)
+    } catch { /* ignore */ }
+  }, [theme])
 
   // Load persistence from localStorage
   useEffect(() => {
@@ -471,17 +559,17 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
   const zoomedPhoto = useWikiPhoto(zoomedStat?.player_name ?? '')
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0e1430', fontFamily: 'Roboto,system-ui,sans-serif', color: '#0e1430' }}>
+    <div style={{ minHeight: '100vh', background: t.bg, fontFamily: 'Roboto,system-ui,sans-serif', color: t.text, transition: 'background-color .3s ease' }}>
 
       {/* ── Header ── */}
-      <header style={{ position: 'sticky', top: 0, zIndex: 30, background: 'linear-gradient(180deg,#141c44,#0e1430)', borderBottom: '3px solid #f5c542', padding: '18px 28px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', boxShadow: '0 6px 24px rgba(0,0,0,.4)' }}>
+      <header style={{ position: 'sticky', top: 0, zIndex: 30, background: theme === 'dark' ? 'linear-gradient(180deg,#141c44,#0e1430)' : 'linear-gradient(180deg,#fff,#f9fafb)', borderBottom: `3px solid ${t.accent}`, padding: '18px 28px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', boxShadow: `0 6px 24px ${theme === 'dark' ? 'rgba(0,0,0,.4)' : 'rgba(0,0,0,.08)'}` }}>
 
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ width: 46, height: 46, borderRadius: 12, background: '#f5c542', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, boxShadow: '0 4px 0 #c79a1f' }}>⚽</div>
+          <div style={{ width: 46, height: 46, borderRadius: 12, background: t.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, boxShadow: `0 4px 0 ${t.accentDark}` }}>⚽</div>
           <div>
-            <div style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 800, fontSize: 21, color: '#fff', letterSpacing: '-.3px', lineHeight: 1 }}>PANINI FAN ALBUM</div>
-            <div style={{ fontFamily: "'Roboto Mono',monospace", fontSize: 11, color: '#f5c542', letterSpacing: 2, marginTop: 4 }}>FAN EDITION · 1970–2026</div>
+            <div style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 800, fontSize: 21, color: t.text, letterSpacing: '-.3px', lineHeight: 1 }}>PANINI FAN ALBUM</div>
+            <div style={{ fontFamily: "'Roboto Mono',monospace", fontSize: 11, color: theme === 'dark' ? t.accent : '#b8860b', letterSpacing: 2, marginTop: 4 }}>FAN EDITION · 1970–2026</div>
           </div>
         </div>
 
@@ -492,7 +580,7 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Search players or nations…"
-            style={{ width: '100%', padding: '11px 14px 11px 40px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,.1)', color: '#fff', fontSize: 14, fontFamily: 'Roboto,sans-serif', outline: 'none', boxSizing: 'border-box' }}
+            style={{ width: '100%', padding: '11px 14px 11px 40px', borderRadius: 10, border: 'none', background: t.button, color: t.text, fontSize: 14, fontFamily: 'Roboto,sans-serif', outline: 'none', boxSizing: 'border-box', transition: 'background-color .3s ease' }}
           />
         </div>
 
@@ -500,11 +588,11 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
         <select
           value={year}
           onChange={e => setYear(Number(e.target.value))}
-          style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,.12)', color: '#fff', fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 14, cursor: 'pointer', outline: 'none' }}
+          style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: t.button, color: t.text, fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, cursor: 'pointer', outline: 'none', transition: 'background-color .3s ease', maxWidth: 160 }}
         >
-          {[...tournaments].reverse().map(t => (
-            <option key={t.year} value={t.year} style={{ background: '#141c44' }}>
-              {t.year}{t.host_country ? ` · ${t.host_country}` : ''}
+          {[...tournaments].reverse().map(tour => (
+            <option key={tour.year} value={tour.year} style={{ background: theme === 'dark' ? '#141c44' : '#f9fafb' }}>
+              {tour.year}{tour.host_country ? ` · ${formatHostCountries(tour.host_country)}` : ''}
             </option>
           ))}
         </select>
@@ -512,38 +600,39 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
         {/* Counter + actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginLeft: 'auto' }}>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 800, fontSize: 22, color: '#f5c542', lineHeight: 1 }}>
-              {collectedCount}<span style={{ color: 'rgba(255,255,255,.4)', fontSize: 15, fontWeight: 600 }}>/{total}</span>
+            <div style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 800, fontSize: 22, color: t.accent, lineHeight: 1 }}>
+              {collectedCount}<span style={{ color: t.textMuted, fontSize: 15, fontWeight: 600 }}>/{total}</span>
             </div>
-            <div style={{ fontFamily: "'Roboto Mono',monospace", fontSize: 10, color: 'rgba(255,255,255,.55)', letterSpacing: 1.5, marginTop: 3 }}>STICKERS</div>
+            <div style={{ fontFamily: "'Roboto Mono',monospace", fontSize: 10, color: t.textMuted2, letterSpacing: 1.5, marginTop: 3 }}>STICKERS</div>
           </div>
-          <button onClick={collectAll} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,.12)', color: '#fff', fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Collect all</button>
-          <button onClick={share} style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: '#f5c542', color: '#0e1430', fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 0 #c79a1f' }}>Share album</button>
+          <button onClick={collectAll} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: t.button, color: t.text, fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'background-color .2s' }} onMouseOver={e => e.currentTarget.style.background = t.buttonHover} onMouseOut={e => e.currentTarget.style.background = t.button}>Collect all</button>
+          <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: t.button, color: t.text, fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'background-color .2s' }} onMouseOver={e => e.currentTarget.style.background = t.buttonHover} onMouseOut={e => e.currentTarget.style.background = t.button}>{theme === 'dark' ? '☀️' : '🌙'}</button>
+          <button onClick={share} style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: t.accent, color: '#0e1430', fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: `0 4px 0 ${t.accentDark}` }}>Share album</button>
         </div>
       </header>
 
       {/* ── Progress bar ── */}
-      <div style={{ background: '#0b1029', padding: '14px 28px', display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid rgba(255,255,255,.06)' }}>
-        <div style={{ flex: 1, height: 10, borderRadius: 99, background: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg,#3ad29f,#f5c542)', borderRadius: 99, transition: 'width .5s ease' }} />
+      <div style={{ background: t.bgAlt, padding: '14px 28px', display: 'flex', alignItems: 'center', gap: 16, borderBottom: `1px solid ${t.border}`, transition: 'background-color .3s ease' }}>
+        <div style={{ flex: 1, height: 10, borderRadius: 99, background: t.progressBg, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${pct}%`, background: t.progress, borderRadius: 99, transition: 'width .5s ease' }} />
         </div>
         <div style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, color: '#3ad29f', minWidth: 54, textAlign: 'right' }}>{pct}%</div>
       </div>
 
       {/* ── Album body ── */}
-      <main style={{ maxWidth: 1180, margin: '0 auto', padding: '34px 28px 80px' }}>
+      <main style={{ maxWidth: 1180, margin: '0 auto', padding: '34px 28px 80px', transition: 'background-color .3s ease' }}>
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '70px 0', color: 'rgba(255,255,255,.5)' }}>
+          <div style={{ textAlign: 'center', padding: '70px 0', color: t.textMuted }}>
             <div style={{ fontSize: 46, marginBottom: 14 }}>⏳</div>
-            <div style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 17, color: '#fff' }}>Loading stickers…</div>
+            <div style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 17, color: t.text }}>Loading stickers…</div>
           </div>
         ) : teams.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '70px 0', color: 'rgba(255,255,255,.5)' }}>
+          <div style={{ textAlign: 'center', padding: '70px 0', color: t.textMuted }}>
             <div style={{ fontSize: 46, marginBottom: 14 }}>🗂️</div>
-            <div style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 17, color: '#fff' }}>
+            <div style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 17, color: t.text }}>
               {query ? `No stickers match "${query}"` : 'No players found'}
             </div>
-            {query && <div style={{ fontSize: 13, marginTop: 6 }}>Try a different player or nation.</div>}
+            {query && <div style={{ fontSize: 13, marginTop: 6, color: t.textMuted }}>Try a different player or nation.</div>}
           </div>
         ) : (
           teams.map(([teamName, players]) => {
@@ -558,10 +647,10 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
                     {tm.flag}
                   </div>
                   <div>
-                    <div style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 800, fontSize: 20, color: '#fff', letterSpacing: '-.3px', lineHeight: 1 }}>{teamName}</div>
-                    <div style={{ fontFamily: "'Roboto Mono',monospace", fontSize: 11, color: 'rgba(255,255,255,.5)', letterSpacing: 1.5, marginTop: 4 }}>{players.length} STICKERS</div>
+                    <div style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 800, fontSize: 20, color: t.text, letterSpacing: '-.3px', lineHeight: 1 }}>{teamName}</div>
+                    <div style={{ fontFamily: "'Roboto Mono',monospace", fontSize: 11, color: t.textMuted, letterSpacing: 1.5, marginTop: 4 }}>{players.length} STICKERS</div>
                   </div>
-                  <div style={{ marginLeft: 'auto', padding: '7px 14px', borderRadius: 99, background: 'rgba(255,255,255,.05)', border: `1.5px solid ${tm.color}`, fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, color: tm.color }}>
+                  <div style={{ marginLeft: 'auto', padding: '7px 14px', borderRadius: 99, background: t.button, border: `1.5px solid ${tm.color}`, fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, color: tm.color }}>
                     {tCollected}/{players.length}
                   </div>
                 </div>
@@ -576,6 +665,7 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
                       collected={isCollected(stat)}
                       flipped={isFlipped(stat)}
                       isDuplicate={isDuplicate(stat)}
+                      theme={theme}
                       onFlip={() => toggleFlip(stat)}
                       onCollect={() => toggleCollect(stat)}
                       onToggleDup={e => { e.stopPropagation(); toggleDup(stat) }}
@@ -595,10 +685,10 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
         return (
           <div
             onClick={() => setZoomId(null)}
-            style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(8,11,28,.86)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+            style={{ position: 'fixed', inset: 0, zIndex: 60, background: t.overlay, backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, transition: 'background-color .3s ease' }}
           >
             <div style={{ animation: 'wc-pop .25s ease', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-              <div style={{ position: 'relative', width: 300, height: 418, borderRadius: 20, overflow: 'hidden', boxShadow: '0 30px 80px rgba(0,0,0,.6)', background: '#fff' }}>
+              <div style={{ position: 'relative', width: 300, height: 418, borderRadius: 20, overflow: 'hidden', boxShadow: '0 30px 80px rgba(0,0,0,.6)', background: t.card }}>
                 {/* Coloured top half */}
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '40%', overflow: 'hidden' }}>
                   <div style={{ position: 'absolute', inset: 0, background: tm.color }} />
@@ -616,25 +706,25 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
                   <PlayerPhoto url={zoomedPhoto} position={zoomedStat.position} large />
                 </div>
                 {/* Info panel */}
-                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '54%', background: '#fff', borderRadius: '20px 20px 0 0', padding: '22px 20px' }}>
-                  <div style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 800, fontSize: 22, color: '#0e1430', letterSpacing: '-.4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '54%', background: t.card, borderRadius: '20px 20px 0 0', padding: '22px 20px' }}>
+                  <div style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 800, fontSize: 22, color: t.cardText, letterSpacing: '-.4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {zoomedStat.player_name}
                   </div>
-                  <div style={{ fontFamily: "'Roboto Mono',monospace", fontSize: 10, color: '#6b7280', letterSpacing: 1.5, margin: '5px 0 14px', textTransform: 'uppercase' }}>
+                  <div style={{ fontFamily: "'Roboto Mono',monospace", fontSize: 10, color: theme === 'dark' ? '#6b7280' : '#9099aa', letterSpacing: 1.5, margin: '5px 0 14px', textTransform: 'uppercase' }}>
                     {zoomedStat.position ?? '—'} · {zoomedStat.team_name} · {zoomedStat.year}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9 }}>
                     {[
                       { label: 'Goals', value: zoomedStat.goals, color: '#f5c542' },
                       { label: 'Assists', value: zoomedStat.assists, color: '#3ad29f' },
-                      { label: 'Apps', value: zoomedStat.appearances, color: '#0e1430' },
-                      { label: 'Minutes', value: zoomedStat.minutes_played, color: '#0e1430' },
+                      { label: 'Apps', value: zoomedStat.appearances, color: t.cardText },
+                      { label: 'Minutes', value: zoomedStat.minutes_played, color: t.cardText },
                       { label: 'Yellow', value: zoomedStat.yellow_cards, color: '#e0a82e' },
                       { label: 'Red', value: zoomedStat.red_cards, color: '#e0556b' },
                     ].map(s => (
-                      <div key={s.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '9px 0', borderRadius: 9, background: '#f3f4f8' }}>
+                      <div key={s.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '9px 0', borderRadius: 9, background: theme === 'dark' ? '#f3f4f8' : 'rgba(0,0,0,.05)', color: theme === 'dark' ? '#0e1430' : '#111827' }}>
                         <span style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 800, fontSize: 20, color: s.color }}>{s.value ?? '—'}</span>
-                        <span style={{ fontFamily: "'Roboto Mono',monospace", fontSize: 8, color: '#9099aa', letterSpacing: 1, marginTop: 2, textTransform: 'uppercase' }}>{s.label}</span>
+                        <span style={{ fontFamily: "'Roboto Mono',monospace", fontSize: 8, color: theme === 'dark' ? '#9099aa' : '#6b7280', letterSpacing: 1, marginTop: 2, textTransform: 'uppercase' }}>{s.label}</span>
                       </div>
                     ))}
                   </div>
@@ -642,7 +732,7 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
               </div>
               <button
                 onClick={() => setZoomId(null)}
-                style={{ marginTop: 18, padding: '10px 26px', borderRadius: 99, border: 'none', background: 'rgba(255,255,255,.15)', color: '#fff', fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                style={{ marginTop: 18, padding: '10px 26px', borderRadius: 99, border: 'none', background: t.button, color: t.text, fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'background-color .2s' }}
               >Close ✕</button>
             </div>
           </div>
@@ -651,7 +741,7 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
 
       {/* ── Share toast ── */}
       {shareToast && (
-        <div style={{ position: 'fixed', bottom: 26, left: '50%', transform: 'translateX(-50%)', zIndex: 70, background: '#3ad29f', color: '#06281d', padding: '14px 24px', borderRadius: 12, fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 14, boxShadow: '0 12px 30px rgba(0,0,0,.4)', animation: 'wc-pop .2s ease' }}>
+        <div style={{ position: 'fixed', bottom: 26, left: '50%', transform: 'translateX(-50%)', zIndex: 70, background: '#3ad29f', color: '#06281d', padding: '14px 24px', borderRadius: 12, fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 14, boxShadow: '0 12px 30px rgba(0,0,0,.4)', animation: 'wc-pop .2s ease', transition: 'background-color .3s ease' }}>
           🔗 Album link copied to clipboard!
         </div>
       )}
