@@ -9,3 +9,13 @@ body {
 #root {
   min-height: 100vh;
 }
+
+@keyframes wc-pop {
+  0% { transform: scale(.8); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes wc-shine {
+  0% { transform: translateX(-120%) rotate(8deg); }
+  100% { transform: translateX(220%) rotate(8deg); }
+}

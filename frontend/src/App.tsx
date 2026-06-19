@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react'
 import { api } from './api'
+import { AlbumPage } from './components/AlbumPage'
 import { CareerPanel } from './components/CareerPanel'
 import { FilterBar } from './components/FilterBar'
 import { PlayerSearch } from './components/PlayerSearch'
 import { StatsTable } from './components/StatsTable'
 import type { PlayerOut, StatsFilters, TournamentOut } from './types'
 
+type View = 'table' | 'album'
+
 export default function App() {
+  const [view, setView] = useState<View>('table')
   const [tournaments, setTournaments] = useState<TournamentOut[]>([])
   const [filters, setFilters] = useState<StatsFilters>({
     year: 2026,
@@ -27,14 +31,12 @@ export default function App() {
   function handleSearchSelect(player: PlayerOut) {
     setSelectedPlayerId(player.id)
     setSelectedPlayerName(player.full_name)
-    // Filter the table to show only this player's career
     setFilters((f) => ({ sort: f.sort, player_id: player.id }))
   }
 
   function handleClosePanel() {
     setSelectedPlayerId(null)
     setSelectedPlayerName(null)
-    // Remove player_id filter when closing
     setFilters((f) => {
       const { player_id: _, ...rest } = f
       return { ...rest, year: rest.year ?? 2026 }
@@ -42,13 +44,29 @@ export default function App() {
   }
 
   function handleFilterChange(f: StatsFilters) {
-    // Clear player focus when user changes filters manually
     setSelectedPlayerId(null)
     setSelectedPlayerName(null)
     setFilters({ ...f, player_id: undefined })
   }
 
   const currentTournament = tournaments.find((t) => t.year === filters.year)
+
+  if (view === 'album') {
+    return (
+      <div>
+        {/* Album view toggle */}
+        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 50 }}>
+          <button
+            onClick={() => setView('table')}
+            style={{ padding: '12px 20px', borderRadius: 99, border: 'none', background: '#f5c542', color: '#0e1430', fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,.35)' }}
+          >
+            📊 Stats table
+          </button>
+        </div>
+        <AlbumPage initialYear={filters.year ?? 2026} tournaments={tournaments} />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
@@ -67,7 +85,15 @@ export default function App() {
                 : 'All tournaments · 1970–2026'}
             </p>
           </div>
-          <PlayerSearch onSelectPlayer={handleSearchSelect} />
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setView('album')}
+              className="px-4 py-2 rounded-lg bg-[#0e1430] text-white text-sm font-bold hover:bg-[#141c44] transition-colors"
+            >
+              🎴 Sticker Album
+            </button>
+            <PlayerSearch onSelectPlayer={handleSearchSelect} />
+          </div>
         </div>
       </header>
 
