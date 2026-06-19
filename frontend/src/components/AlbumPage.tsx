@@ -345,10 +345,9 @@ function StickerCard({
 
           {/* Photo area */}
           <div style={{
-            position: 'absolute', top: 46, left: 8, right: 8, bottom: 54,
-            borderRadius: 8,
+            position: 'absolute', top: 46, left: 0, right: 0, bottom: 54,
             background: theme === 'dark' ? 'repeating-linear-gradient(135deg,rgba(0,0,0,.04) 0 8px,rgba(0,0,0,.08) 8px 16px)' : 'repeating-linear-gradient(135deg,rgba(0,0,0,.02) 0 8px,rgba(0,0,0,.04) 8px 16px)',
-            display: 'flex', alignItems: 'flex-end', justifyContent: 'center', overflow: 'hidden',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
           }}>
             <PlayerPhoto url={photoUrl} position={stat.position} />
           </div>
