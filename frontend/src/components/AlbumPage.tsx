@@ -565,7 +565,7 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
     <div style={{ minHeight: '100vh', background: t.bg, fontFamily: 'Roboto,system-ui,sans-serif', color: t.text, transition: 'background-color .3s ease' }}>
 
       {/* ── Header ── */}
-      <header style={{ position: 'sticky', top: 0, zIndex: 30, background: theme === 'dark' ? 'linear-gradient(180deg,#141c44,#0e1430)' : 'linear-gradient(180deg,#fff,#f9fafb)', borderBottom: `3px solid ${t.accent}`, padding: '18px 28px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', boxShadow: `0 6px 24px ${theme === 'dark' ? 'rgba(0,0,0,.4)' : 'rgba(0,0,0,.08)'}` }}>
+      <header style={{ background: theme === 'dark' ? 'linear-gradient(180deg,#141c44,#0e1430)' : 'linear-gradient(180deg,#fff,#f9fafb)', borderBottom: `3px solid ${t.accent}`, padding: '18px 28px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', boxShadow: `0 6px 24px ${theme === 'dark' ? 'rgba(0,0,0,.4)' : 'rgba(0,0,0,.08)'}` }}>
 
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
