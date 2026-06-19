@@ -103,7 +103,12 @@ SSH `ubuntu@136.248.99.64` with `ssh-keys/ssh-key-2026-03-05.key` (gitignored).
 - **The VM uses a scoped DB role `wc_api`, NOT the superuser** — SELECT on data tables,
   read/write only on `api_*` tables, no DDL. Its DSN is the only credential on the box
   (`/opt/world-cup-players/.env.local`, chmod 600); the superuser DSN stays on the local machine.
-- Redeploy: `git -C /opt/world-cup-players pull && uv sync --extra api && sudo systemctl restart world-cup-api`.
+- **CD: every push to `main` auto-deploys** via [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
+  — SSHes into the VM using the `VM_SSH_KEY_B64` repo secret (base64-encoded private key) and runs
+  `scripts/deploy.sh` (git reset → uv sync → restart → health check).
+- Manual redeploy from laptop: `./scripts/deploy-remote.sh` (wraps the same `scripts/deploy.sh` over SSH).
+- **Migrations are NOT in the deploy pipeline** — `wc_api` has no DDL. Apply new migrations from
+  the local machine with the superuser DSN *before* pushing code that depends on them.
 
 ## Conventions
 
