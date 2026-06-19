@@ -6,9 +6,9 @@ Guidance for Claude Code working in this repo. See [README.md](README.md) for us
 
 A headless scraper for **FIFA World Cup player stats** (1970–present) that loads into a
 **self-hosted Postgres** database on the Oracle Cloud VM, at **tournament-totals granularity**
-(one row per player per World Cup), **plus a read-only HTTP API** (FastAPI) on top of that
-database. The schema and loader are kept clean, idempotent, and re-runnable; the API is a
-separate optional layer (see **API** below).
+(one row per player per World Cup), **plus a read-only HTTP API** (FastAPI) and a **React
+frontend** on top of that database. The schema and loader are kept clean, idempotent, and
+re-runnable; the API and frontend are separate optional layers (see **API** and **Frontend** below).
 
 ## Data sources (important — non-obvious history)
 
@@ -76,6 +76,7 @@ Oracle VM can only run ESPN-only scrapes.
 - [scripts/refresh_year.py](scripts/refresh_year.py) — atomic ESPN-only reload of one year:
   scrapes first, then in a single transaction deletes old stats + orphaned players and inserts
   fresh rows. Used by the cron job on the VM. A failed scrape rolls back, leaving old data intact.
+- [frontend/](frontend/) — React SPA (see **Frontend** below).
 
 ## API (read layer)
 
@@ -95,6 +96,15 @@ Non-obvious design points:
   connection, return response models; unit-tested with fake connections (see
   `tests/conftest.py`), so the suite stays offline like the parser tests. Sorting is
   whitelisted; never interpolate user input as SQL.
+- **Query-time player dedup by `normalized_name`.** Because `birth_date` is uniformly null,
+  the `(normalized_name, birth_date)` identity splits every multi-tournament player into one
+  row per edition (Messi = 6 rows). The API papers over this at read time without touching data:
+  `list_players` groups by `normalized_name` (one search result per person, returning a
+  representative `min(id)`); `career_aggregates` and `list_stats?player_id=` re-expand that id to
+  **all** rows sharing its `normalized_name`, so career totals and per-tournament breakdowns span
+  every edition. Trade-off: two genuinely different people with the same normalized name collapse
+  in the view (accepted; the real fix is backfilling `birth_date`). This dedup is read-only and
+  reversible — the underlying duplicate rows are untouched.
 - **Response schemas** ([api/schemas.py](src/world_cup/api/schemas.py)) are flat and separate
   from the scraper domain models — keep them decoupled so scraper internals don't leak.
 - **Keys are stored as SHA-256 hashes, never plaintext** ([api/keys.py](src/world_cup/api/keys.py));
@@ -102,14 +112,51 @@ Non-obvious design points:
   (`world-cup api-key issue/list/upgrade/revoke`). Signup is IP-rate-limited (no email
   verification yet — the known weak spot; next milestone).
 
+## Frontend
+
+React SPA under [frontend/](frontend/) built with **Vite + TypeScript + Tailwind CSS v4**.
+Phase 1 of a sticker-album app — currently a single data page. Intended to evolve into an
+unofficial FIFA World Cup sticker album interface.
+
+Key design points:
+- **Single page**: filters (year, position, team, sort, min goals) + paginated stats table +
+  slide-in career panel. No router needed yet.
+- **API client** ([frontend/src/api.ts](frontend/src/api.ts)): thin typed `fetch` wrapper —
+  no axios or react-query. Five methods covering tournaments, player search, stats, and career.
+- **Filtering strategy**: `/v1/stats` handles year/team/position/sort; name search uses
+  `/v1/players?q=` (separate endpoint) which returns player metadata without stats. Selecting
+  a player from autocomplete sets `player_id` on the stats filter and opens the career panel.
+- **API key** (`VITE_API_KEY`) is baked into the JS bundle at build time. Use a dedicated
+  `free`-tier key — never an admin key. Key is read-only and rate-limited so bundle exposure
+  is acceptable. The frontend key (issued 2026-06-19, expires 2026-07-19) is stored in
+  `.env.local` on both the laptop and the VM.
+- **Dev proxy**: Vite proxies `/v1` → `http://136.248.99.64` in dev so CORS is never an issue
+  locally. In prod, Caddy routes `/v1/*` directly to `:8000`.
+
+Non-obvious gotcha:
+- `export $(grep '^VITE_' .env.local | xargs)` is used in `deploy.sh` to export VITE vars
+  before the build. `source <()` process substitution does **not** work in non-interactive SSH
+  sessions (the CD pipeline's shell), so always use the `export $(xargs)` form.
+
+### Local frontend dev
+
+```bash
+cd frontend
+npm install                    # first time only
+# create frontend/.env.local with: VITE_API_KEY=wc_xxxxx
+npm run dev                    # http://localhost:5173 (proxies /v1 to live VM)
+npm run build                  # outputs to frontend/dist/
+```
+
 ### Deployment (operational — not in the repo)
 
 Live at **`http://136.248.99.64`** on the user's **Oracle Cloud VM** (Ubuntu 24.04, ~950MB RAM,
 2 GB swap). SSH `ubuntu@136.248.99.64` with `ssh-keys/ssh-key-2026-03-05.key` (gitignored).
 - Code at `/opt/world-cup-players`; runs as systemd unit `world-cup-api.service`
   (`uv run world-cup-api --host 127.0.0.1 --port 8000 --workers 2`).
-- **Caddy** (system service, `/etc/caddy/Caddyfile`) reverse-proxies `:80 → :8000`, **HTTP only**
-  (no domain/TLS yet — add a domain + Caddy auto-TLS for HTTPS).
+- **Caddy** (system service, `/etc/caddy/Caddyfile`) serves the React SPA at `/` from
+  `frontend/dist/` and proxies `/v1/*`, `/docs*`, `/openapi.json`, `/health` to `:8000`.
+  **HTTP only** (no domain/TLS yet — add a domain + Caddy auto-TLS for HTTPS).
 - **Database is self-hosted Postgres 18** on the VM (migrated from Supabase). Two roles:
   - `wc_owner` — full write access on all data tables; used by the scraper and refresh cron.
     DSN: `SUPABASE_DB_URL=postgresql://wc_owner:…@localhost/world_cup`
@@ -120,7 +167,8 @@ Live at **`http://136.248.99.64`** on the user's **Oracle Cloud VM** (Ubuntu 24.
   has DDL on the world_cup database). No remote superuser needed.
 - **CD: every push to `main` auto-deploys** via [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
   — SSHes into the VM using the `VM_SSH_KEY_B64` repo secret (base64-encoded private key) and runs
-  `scripts/deploy.sh` (git reset → uv sync → restart → health check).
+  `scripts/deploy.sh` (git reset → frontend build → uv sync → restart → health check).
+  `VITE_API_KEY` is sourced from `.env.local` on the VM before the build.
 - Manual redeploy from laptop: `./scripts/deploy-remote.sh` (wraps the same `scripts/deploy.sh` over SSH).
 - **2026 refresh cron** (ubuntu crontab): `0 0,6,12,18 * * *` runs
   `uv run python scripts/refresh_year.py 2026`, logging to `/var/log/wc-refresh.log`.
@@ -158,6 +206,10 @@ psql "$SUPABASE_DB_URL" -f supabase/migrations/0002_api.sql    # apply API table
 uv run python scripts/refresh_year.py 2026
 uv run world-cup-api --port 8000          # serve locally (http://localhost:8000/docs)
 uv run world-cup api-key issue --email x@y.com --tier premium # admin: mint a key
+
+# Frontend
+cd frontend && npm run dev                # http://localhost:5173 (proxies /v1 to live VM)
+cd frontend && npm run build              # build frontend/dist/ for production
 ```
 
 ## Status / next
@@ -179,10 +231,18 @@ via cron (ESPN-only).
   updates (FBref-loaded minutes/cards are preserved via `coalesce` upserts).
 
 **API — built and deployed.** Read-only FastAPI layer with API-key auth + tiered rate limiting,
-live on the Oracle VM behind Caddy on HTTP. Next:
+live on the Oracle VM behind Caddy on HTTP.
+
+**Frontend — built and deployed.** React SPA at `http://136.248.99.64/` — stats table with
+filters, player name search, and career panel. Phase 1 of a sticker-album app. Next for the
+frontend: sticker card design and the album "gluing" mechanic.
+
+Next for the backend/infra:
 - **Signup email verification** — `POST /v1/signup` currently issues a key to any email with only
   an IP rate-limit guarding it. This is the immediate next milestone.
 - Later: HTTPS (needs a domain), `last_used_at` write-throttling, rate-counter cleanup job.
 - Jersey numbers and legacy (1970–1998) deep backfill from FBref squad/lineup pages (local only).
+- Frontend API key renewal — current key expires 2026-07-19; rotate via
+  `world-cup api-key issue`, update `.env.local` on VM, redeploy.
 
 Run git commits/pushes only when the user asks.

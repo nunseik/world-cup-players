@@ -97,15 +97,22 @@ def list_players(
         clauses.append("t.normalized_name = %s")
         params.append(canonical_team_name(team))
     where = ("where " + " and ".join(clauses)) if clauses else ""
-    # distinct: the team join can fan a player across tournaments.
+    # Collapse by normalized_name: birth_date is uniformly null, so the
+    # (normalized_name, birth_date) identity splits every multi-tournament player
+    # into one row per edition. Group by name to present one person; the returned
+    # id is a representative row (min id) the career endpoint re-expands by name.
     total = _scalar(
-        conn, f"select count(distinct p.id) from players p{join} {where}", tuple(params)
+        conn,
+        f"select count(distinct p.normalized_name) from players p{join} {where}",
+        tuple(params),
     )
     rows = conn.execute(
         f"""
-        select distinct p.id, p.full_name, p.position, p.birth_date
+        select min(p.id) as id, min(p.full_name) as full_name,
+               max(p.position) as position, max(p.birth_date) as birth_date
         from players p{join} {where}
-        order by p.full_name limit %s offset %s
+        group by p.normalized_name
+        order by min(p.full_name) limit %s offset %s
         """,
         (*params, limit, offset),
     ).fetchall()
@@ -121,9 +128,12 @@ def get_player(conn: Any, player_id: int) -> PlayerOut | None:
 
 
 def career_aggregates(conn: Any, player_id: int) -> CareerAggregateOut | None:
+    # Aggregate across every player row sharing this one's normalized_name, so a
+    # player split into one row per edition (null birth_date) yields a true
+    # all-tournaments career total. min(id)/min(name) give a stable representative.
     row = conn.execute(
         """
-        select p.id as player_id, p.full_name as player_name,
+        select min(p.id) as player_id, min(p.full_name) as player_name,
                count(s.id)                      as tournaments_played,
                coalesce(sum(s.goals), 0)        as total_goals,
                coalesce(sum(s.assists), 0)      as total_assists,
@@ -132,12 +142,12 @@ def career_aggregates(conn: Any, player_id: int) -> CareerAggregateOut | None:
                coalesce(sum(s.red_cards), 0)    as total_red_cards
         from players p
         left join player_tournament_stats s on s.player_id = p.id
-        where p.id = %s
-        group by p.id, p.full_name
+        where p.normalized_name = (select normalized_name from players where id = %s)
         """,
         (player_id,),
     ).fetchone()
-    return CareerAggregateOut(**row) if row else None
+    # The aggregate always returns one row; a missing id yields null player_id.
+    return CareerAggregateOut(**row) if row and row["player_id"] is not None else None
 
 
 def list_stats(
@@ -153,7 +163,11 @@ def list_stats(
         clauses.append("tm.normalized_name = %s")
         params.append(canonical_team_name(team))
     if player_id is not None:
-        clauses.append("s.player_id = %s")
+        # Expand to every row sharing this player's name (see list_players) so a
+        # player's per-tournament breakdown spans all their editions, not just one.
+        clauses.append(
+            "p.normalized_name = (select normalized_name from players where id = %s)"
+        )
         params.append(player_id)
     if position:
         clauses.append("p.position = %s")
