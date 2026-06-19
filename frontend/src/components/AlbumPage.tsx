@@ -445,6 +445,7 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
   const [flipped, setFlipped] = useState<Record<string, boolean>>({})
   const [zoomId, setZoomId] = useState<number | null>(null)
   const [shareToast, setShareToast] = useState(false)
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const t = THEMES[theme]
@@ -550,23 +551,33 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
     const encoded = btoa(JSON.stringify({ c: collected, d: duplicates }))
     const url = new URL(window.location.href)
     url.searchParams.set('collection', encoded)
-    const shareUrl = url.toString()
+    const fullShareUrl = url.toString()
 
     // Try Web Share API first (mobile native share)
     if (navigator.share) {
       navigator.share({
         title: 'PANINI FAN ALBUM',
         text: `Check out my World Cup sticker collection! ${collectedCount}/${total} stickers collected (${pct}%)`,
-        url: shareUrl,
-      }).catch(() => {})
+        url: fullShareUrl,
+      }).catch(() => {
+        // If share fails, try clipboard, then show modal
+        tryClipboard(fullShareUrl)
+      })
     } else {
-      // Fall back to clipboard
-      navigator.clipboard.writeText(shareUrl).catch(() => {})
+      // Try clipboard first
+      tryClipboard(fullShareUrl)
     }
+  }
 
-    setShareToast(true)
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-    toastTimerRef.current = setTimeout(() => setShareToast(false), 2200)
+  function tryClipboard(url: string) {
+    navigator.clipboard.writeText(url).then(() => {
+      setShareToast(true)
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+      toastTimerRef.current = setTimeout(() => setShareToast(false), 2200)
+    }).catch(() => {
+      // If clipboard fails, show modal so user can manually copy
+      setShareUrl(url)
+    })
   }
 
   // Filter + group by team
@@ -774,6 +785,37 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
       {shareToast && (
         <div style={{ position: 'fixed', bottom: 26, left: '50%', transform: 'translateX(-50%)', zIndex: 70, background: '#3ad29f', color: '#06281d', padding: '14px 24px', borderRadius: 12, fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 14, boxShadow: '0 12px 30px rgba(0,0,0,.4)', animation: 'wc-pop .2s ease', transition: 'background-color .3s ease' }}>
           🔗 Album link copied to clipboard!
+        </div>
+      )}
+
+      {/* ── Share modal (fallback) ── */}
+      {shareUrl && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 80, padding: '20px' }}>
+          <div style={{ background: t.card, borderRadius: 16, padding: '28px 32px', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,.4)', textAlign: 'center' }}>
+            <div style={{ fontSize: 32, marginBottom: 14 }}>🔗</div>
+            <div style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 800, fontSize: 18, color: t.cardText, marginBottom: 12 }}>Share Your Collection</div>
+            <div style={{ fontFamily: 'Roboto,sans-serif', fontSize: 13, color: theme === 'dark' ? 'rgba(255,255,255,.6)' : 'rgba(17,24,39,.6)', marginBottom: 20 }}>
+              Copy this link to share your album with {collectedCount}/{total} stickers ({pct}%)
+            </div>
+            <div style={{ background: theme === 'dark' ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.05)', padding: '12px 14px', borderRadius: 10, marginBottom: 18, wordBreak: 'break-all' }}>
+              <input
+                value={shareUrl}
+                readOnly
+                onClick={e => (e.target as HTMLInputElement).select()}
+                style={{ width: '100%', background: 'transparent', border: 'none', fontFamily: 'monospace', fontSize: 11, color: t.cardText, outline: 'none', cursor: 'text' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => { navigator.clipboard.writeText(shareUrl); setShareToast(true); if (toastTimerRef.current) clearTimeout(toastTimerRef.current); toastTimerRef.current = setTimeout(() => { setShareToast(false); setShareUrl(null) }, 2200) }}
+                style={{ flex: 1, padding: '10px 16px', borderRadius: 10, border: 'none', background: t.accent, color: '#0e1430', fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: `0 4px 0 ${t.accentDark}` }}
+              >Copy link</button>
+              <button
+                onClick={() => setShareUrl(null)}
+                style={{ flex: 1, padding: '10px 16px', borderRadius: 10, border: 'none', background: t.button, color: t.text, fontFamily: 'Poppins,sans-serif', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+              >Close</button>
+            </div>
+          </div>
         </div>
       )}
 
