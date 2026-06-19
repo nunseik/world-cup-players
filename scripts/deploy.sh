@@ -23,6 +23,21 @@ git reset --hard "origin/$BRANCH"
 NEW=$(git rev-parse --short HEAD)
 echo "    $OLD -> $NEW"
 
+echo "==> building frontend"
+if command -v npm &>/dev/null; then
+  # Load VITE_* vars from .env.local (only VITE_ prefix — never exports DB creds)
+  if [ -f "$APP_DIR/.env.local" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    source <(grep '^VITE_' "$APP_DIR/.env.local")
+    set +a
+  fi
+  (cd "$APP_DIR/frontend" && npm ci --prefer-offline && npm run build)
+  echo "    frontend built"
+else
+  echo "    WARN: npm not found — skipping frontend build"
+fi
+
 echo "==> uv sync --extra api"
 "$UV" sync --extra api
 
