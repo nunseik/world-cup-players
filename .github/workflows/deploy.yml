@@ -1,0 +1,23 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to Oracle VM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run deploy.sh on VM
+        env:
+          SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          echo "$SSH_KEY" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          ssh -i /tmp/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=30 \
+            ubuntu@136.248.99.64 \
+            "bash /opt/world-cup-players/scripts/deploy.sh"
+          rm -f /tmp/deploy_key
