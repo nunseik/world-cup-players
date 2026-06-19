@@ -78,26 +78,122 @@ uv run world-cup scrape --year 2022 --source espn
 
 ## API
 
-A read-only HTTP API (FastAPI) serves the loaded data. It's an optional install:
+A read-only HTTP API serves FIFA World Cup player stats (1970–present).
+
+**Live base URL:** `http://136.248.99.64`  
+**Interactive docs:** `http://136.248.99.64/docs`
+
+### Getting an API key
+
+All `/v1` endpoints require a key. Request a free key with your email:
+
+```bash
+curl -s -XPOST http://136.248.99.64/v1/signup \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"you@example.com"}'
+```
+
+Response (shown **once** — save it):
+
+```json
+{
+  "api_key": "wc_AbCdEfGh...",
+  "tier": "free",
+  "expires_at": "2026-07-19T00:00:00Z",
+  "message": "Store this API key now — it will not be shown again."
+}
+```
+
+Pass the key on every request:
+
+```bash
+curl -H 'X-API-Key: wc_AbCdEfGh...' http://136.248.99.64/v1/tournaments
+# or
+curl -H 'Authorization: Bearer wc_AbCdEfGh...' http://136.248.99.64/v1/tournaments
+```
+
+**Rate limits:** `free` = 60 req/min, `premium` = 600 req/min. Over-limit requests
+get `429` + `Retry-After`; every response includes `X-RateLimit-Limit` / `X-RateLimit-Remaining`.
+
+### Endpoints
+
+All list endpoints return `{"items": [...], "total": N, "limit": N, "offset": N}`.
+Use `?limit=` and `?offset=` for pagination.
+
+#### Tournaments
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/tournaments` | List all World Cups (1970–2026) |
+| `GET` | `/v1/tournaments/{year}` | Single tournament details |
+| `GET` | `/v1/tournaments/{year}/leaderboards/scorers` | Top scorers for a tournament |
+| `GET` | `/v1/tournaments/{year}/leaderboards/assists` | Top assisters for a tournament |
+
+```bash
+curl -H 'X-API-Key: ...' http://136.248.99.64/v1/tournaments/2022
+curl -H 'X-API-Key: ...' 'http://136.248.99.64/v1/tournaments/2022/leaderboards/scorers?limit=10'
+```
+
+#### Players
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/players` | Search/list players |
+| `GET` | `/v1/players/{id}` | Single player |
+| `GET` | `/v1/players/{id}/career` | Career totals across all World Cups |
+
+Query params for `/v1/players`: `q` (name search, accent/case-insensitive), `position`, `team`.
+
+```bash
+curl -H 'X-API-Key: ...' 'http://136.248.99.64/v1/players?q=ronaldo'
+curl -H 'X-API-Key: ...' 'http://136.248.99.64/v1/players/42/career'
+```
+
+#### Teams
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/teams` | List teams |
+
+Query params: `confederation` (UEFA, CONMEBOL, CONCACAF, CAF, AFC, OFC).
+
+```bash
+curl -H 'X-API-Key: ...' 'http://136.248.99.64/v1/teams?confederation=CONMEBOL'
+```
+
+#### Stats
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/stats` | Player stats by tournament (filterable, sortable) |
+
+Query params: `year`, `team`, `player_id`, `position`, `min_goals`.  
+`sort`: `goals`, `assists`, `minutes`, `appearances`, `yellow_cards`, `red_cards` — prefix with `-` for descending.
+
+```bash
+# Top scorers across all tournaments with at least 3 goals:
+curl -H 'X-API-Key: ...' 'http://136.248.99.64/v1/stats?min_goals=3&sort=-goals'
+
+# Brazil's 2022 squad stats:
+curl -H 'X-API-Key: ...' 'http://136.248.99.64/v1/stats?year=2022&team=Brazil'
+```
+
+#### Health (no auth)
+
+```bash
+curl http://136.248.99.64/health
+```
+
+### Running locally
 
 ```bash
 uv sync --extra api
-psql "$SUPABASE_DB_URL" -f supabase/migrations/0002_api.sql   # API tables (keys, rate limits)
-uv run world-cup-api --port 8000                              # add --reload for dev
+psql "$SUPABASE_DB_URL" -f supabase/migrations/0002_api.sql   # one-time: API tables
+uv run world-cup-api --port 8000 --reload
+# docs at http://localhost:8000/docs
 ```
 
-Open `http://localhost:8000/docs` for interactive Swagger docs.
-
-**Auth — API keys.** Every `/v1` endpoint requires a key, sent as `X-API-Key: <token>`
-(or `Authorization: Bearer <token>`). Keys are **temporary** (default 30-day expiry) and
-tied to a tier (`free` / `premium`). Users get one via self-serve signup:
-
-```bash
-curl -XPOST localhost:8000/v1/signup -H 'content-type: application/json' \
-  -d '{"email":"you@example.com"}'        # returns a free key, shown once
-```
-
-Admins manage keys from the CLI (runs with DB credentials):
+Admin key management (requires DB credentials):
 
 ```bash
 uv run world-cup api-key issue   --email you@example.com --tier premium
@@ -105,16 +201,6 @@ uv run world-cup api-key upgrade --email you@example.com --tier premium
 uv run world-cup api-key revoke  --prefix wc_AbC12dEf
 uv run world-cup api-key list
 ```
-
-**Rate limiting** is per-tier, per-minute (`free`=60, `premium`=600 by default), enforced
-with a Postgres fixed-window counter — no Redis. Over-limit requests get `429` +
-`Retry-After`; every response carries `X-RateLimit-Limit` / `-Remaining` headers.
-
-**Endpoints** (all under `/v1`): `tournaments`, `tournaments/{year}`,
-`tournaments/{year}/leaderboards/{scorers,assists}`, `players` (search by `q`/`position`/`team`),
-`players/{id}`, `players/{id}/career`, `teams`, `stats` (filter by `year`/`team`/`player_id`/
-`position`/`min_goals`, sortable). List endpoints return an offset-paginated
-`{items, total, limit, offset}` envelope.
 
 ## Layout
 
