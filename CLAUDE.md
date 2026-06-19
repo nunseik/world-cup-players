@@ -115,17 +115,25 @@ Non-obvious design points:
 ## Frontend
 
 React SPA under [frontend/](frontend/) built with **Vite + TypeScript + Tailwind CSS v4**.
-Phase 1 of a sticker-album app — currently a single data page. Intended to evolve into an
-unofficial FIFA World Cup sticker album interface.
+Phase 1 of a sticker-album app — currently a single "album" view with player cards as stickers,
+plus a stats table view. Intended to evolve into an unofficial FIFA World Cup sticker album interface.
 
 Key design points:
-- **Single page**: filters (year, position, team, sort, min goals) + paginated stats table +
-  slide-in career panel. No router needed yet.
+- **Two views**: sticker album (phase 1) and stats table (fallback). Album view is the primary
+  interface, showing players grouped by team in a collectable card format.
+- **Sticker album** ([frontend/src/components/AlbumPage.tsx](frontend/src/components/AlbumPage.tsx)):
+  - Player cards with front (photo + position) and back (stats) rendered via 3D CSS transforms
+  - Wikipedia API integration for player photos (batch-fetched, cached in memory)
+  - Collected/duplicate tracking persisted to localStorage (`wc_album_v1`)
+  - Dark/light theme auto-detects system preference (`window.matchMedia('(prefers-color-scheme: dark)')`)
+    and updates automatically when system preference changes
+  - Header scrolls naturally with content (not sticky) to maximize mobile screen space
+  - Year selector shows tournament host countries (abbreviated, e.g. USA/CAN/MEX)
+  - Default year is 2022, progress bar shows collection percentage
+- **Stats table view**: filters by year/team/position/sort, player search via name/team autocomplete,
+  slide-in career panel.
 - **API client** ([frontend/src/api.ts](frontend/src/api.ts)): thin typed `fetch` wrapper —
   no axios or react-query. Five methods covering tournaments, player search, stats, and career.
-- **Filtering strategy**: `/v1/stats` handles year/team/position/sort; name search uses
-  `/v1/players?q=` (separate endpoint) which returns player metadata without stats. Selecting
-  a player from autocomplete sets `player_id` on the stats filter and opens the career panel.
 - **API key** (`VITE_API_KEY`) is baked into the JS bundle at build time. Use a dedicated
   `free`-tier key — never an admin key. Key is read-only and rate-limited so bundle exposure
   is acceptable. The frontend key (issued 2026-06-19, expires 2026-07-19) is stored in
@@ -233,9 +241,10 @@ via cron (ESPN-only).
 **API — built and deployed.** Read-only FastAPI layer with API-key auth + tiered rate limiting,
 live on the Oracle VM behind Caddy on HTTP.
 
-**Frontend — built and deployed.** React SPA at `http://136.248.99.64/` — stats table with
-filters, player name search, and career panel. Phase 1 of a sticker-album app. Next for the
-frontend: sticker card design and the album "gluing" mechanic.
+**Frontend — built and deployed.** React SPA at `http://136.248.99.64/` — sticker album interface
+(phase 1) with 2022 as default year, Wikipedia player photos, dark/light theme (auto-follows system
+preference), and scrollable header for mobile. Fallback stats table view with filters and player search.
+Next for the frontend: album card "gluing" mechanic and sticker set completion rewards.
 
 Next for the backend/infra:
 - **Signup email verification** — `POST /v1/signup` currently issues a key to any email with only

@@ -1,12 +1,16 @@
-# World Cup Players Scraper
+# World Cup Players
 
-Headless scraper for FIFA World Cup player stats (1970–present) → Supabase/Postgres.
+Headless scraper for FIFA World Cup player stats (1970–present) → self-hosted Postgres on Oracle VM.
+Read-only API + interactive sticker album React frontend at **`http://136.248.99.64`**.
 
-- **Primary source: FBref (Sports Reference)** — full rosters with minutes, goals,
-  assists, cards, **and fouls**. Covers all World Cups (goals/appearances back to 1970;
-  minutes/fouls for the modern era).
-- **Cross-check source: ESPN** (2002+) — Goals/Assists leaderboards only. Used to
-  corroborate and fill FBref's goals/assists.
+## Data
+
+- **Primary source: FBref (Sports Reference)** — full rosters with minutes, goals, assists,
+  cards, **and fouls**. Covers all World Cups (goals/appearances back to 1970; minutes/fouls
+  for the modern era).
+- **Cross-check source: ESPN** (2002+) — Goals/Assists leaderboards. Used to corroborate
+  and fill FBref's data. 2026 refreshes automatically every 6 hours (ESPN-only; FBref blocked
+  by Cloudflare from Oracle IPs).
 
 Data is stored at **tournament-totals granularity** (one row per player per World Cup).
 All stat fields are nullable — older tournaments don't record minutes/fouls, and jersey
@@ -202,6 +206,30 @@ uv run world-cup api-key revoke  --prefix wc_AbC12dEf
 uv run world-cup api-key list
 ```
 
+## Frontend: Interactive Sticker Album
+
+Live at **`http://136.248.99.64`** — an unofficial FIFA World Cup sticker album interface.
+
+### Features
+
+- **Sticker cards**: Player cards grouped by team with front (photo + position) and back (tournament stats)
+- **Collection tracking**: Mark stickers as collected or duplicate; persists locally
+- **Player photos**: Fetched from Wikipedia (cached in browser memory)
+- **Theme**: Automatically follows your system preference (light/dark); updates when system setting changes
+- **Responsive**: Header scrolls away on smaller screens to maximize content area
+- **Filters**: Search players by name or nation, select tournament year (2022 default), view stats table view
+
+### Local development
+
+```bash
+cd frontend
+npm install                    # first time only
+# Create frontend/.env.local with your API key:
+echo 'VITE_API_KEY=wc_your_key_here' > .env.local
+npm run dev                    # http://localhost:5173 (proxies /v1 to live VM)
+npm run build                  # outputs to frontend/dist/
+```
+
 ## Layout
 
 | Path | Purpose |
@@ -232,8 +260,11 @@ ESPN's fixture is a real saved page; FBref's mirrors its documented `data-stat` 
 - [x] Milestone 3 — all 15 tournaments loaded (1970–2026), 7 505 rows in self-hosted Postgres on Oracle VM
 - [x] API — read-only FastAPI layer with key auth + tiered rate limiting, live at `http://136.248.99.64`
 - [x] 2026 auto-refresh — ESPN-only cron every 6 hours on the VM (FBref blocked by Cloudflare from Oracle IPs)
+- [x] Frontend phase 1 — React SPA sticker album interface with Wikipedia photos, theme auto-sync with system
+  preference, responsive scrollable header, defaults to 2022, collection tracking
 - [ ] Signup email verification — `POST /v1/signup` is IP-rate-limited only; no email confirmation yet
 - [ ] HTTPS — needs a domain + Caddy auto-TLS
+- [ ] Frontend phase 2 — album card "gluing" mechanic, set completion rewards
 - [ ] Milestone 4 — jersey numbers + legacy (1970–1998) backfill from FBref squad/lineup pages
 
 ## Known limitations
