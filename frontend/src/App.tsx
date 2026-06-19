@@ -10,7 +10,7 @@ import type { PlayerOut, StatsFilters, TournamentOut } from './types'
 type View = 'table' | 'album'
 
 export default function App() {
-  const [view, setView] = useState<View>('table')
+  const [view, setView] = useState<View>('album')
   const [tournaments, setTournaments] = useState<TournamentOut[]>([])
   const [filters, setFilters] = useState<StatsFilters>({
     year: 2026,
