@@ -194,7 +194,8 @@ def list_stats(
     total = _scalar(conn, f"select count(*) {base_from} {where}", tuple(params))
     rows = conn.execute(
         f"""
-        select s.player_id, p.full_name as player_name, tm.name as team_name,
+        select s.player_id, p.full_name as player_name, p.position,
+               tm.name as team_name,
                t.year, s.jersey_number, s.goals, s.assists, s.minutes_played,
                s.fouls_committed, s.yellow_cards, s.red_cards, s.appearances
         {base_from} {where}

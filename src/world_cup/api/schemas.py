@@ -50,6 +50,7 @@ class PlayerOut(BaseModel):
 class PlayerStatOut(BaseModel):
     player_id: int
     player_name: str
+    position: str | None = None
     team_name: str | None = None
     year: int
     jersey_number: int | None = None

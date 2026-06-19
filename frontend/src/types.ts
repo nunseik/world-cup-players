@@ -23,6 +23,7 @@ export interface PlayerOut {
 export interface PlayerStatOut {
   player_id: number
   player_name: string
+  position: string | null
   team_name: string | null
   year: number
   jersey_number: number | null
