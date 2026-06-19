@@ -116,6 +116,84 @@ function getAvatar(position: string | null): string {
   return '🧑'
 }
 
+// ─── Wikipedia photo cache ────────────────────────────────────────────────────
+
+const _photoCache = new Map<string, string | null>()
+const _photoListeners = new Map<string, Set<() => void>>()
+
+function _notifyPhoto(name: string) {
+  _photoListeners.get(name)?.forEach(fn => fn())
+}
+
+async function batchFetchPhotos(names: string[]) {
+  const toFetch = names.filter(n => n && !_photoCache.has(n))
+  if (!toFetch.length) return
+  const BATCH = 50
+  for (let i = 0; i < toFetch.length; i += BATCH) {
+    const batch = toFetch.slice(i, i + BATCH)
+    try {
+      const q = batch.map(n => encodeURIComponent(n)).join('|')
+      const res = await fetch(
+        `https://en.wikipedia.org/w/api.php?action=query&titles=${q}&prop=pageimages&format=json&pithumbsize=400&origin=*`
+      )
+      const json = await res.json()
+      // Build title→url map from response pages
+      const byTitle = new Map<string, string>()
+      for (const p of Object.values(json.query?.pages ?? {}) as Record<string, unknown>[]) {
+        const page = p as { title?: string; thumbnail?: { source?: string } }
+        if (page.title && page.thumbnail?.source) byTitle.set(page.title, page.thumbnail.source)
+      }
+      // Wikipedia normalizes titles (e.g. "Lionel messi" → "Lionel Messi"); track that mapping
+      const normMap = new Map<string, string>()
+      for (const { from, to } of (json.query?.normalized ?? []) as Array<{ from: string; to: string }>) {
+        normMap.set(from, to)
+      }
+      for (const name of batch) {
+        const wikiTitle = normMap.get(name) ?? name
+        const photoUrl = byTitle.get(wikiTitle) ?? null
+        _photoCache.set(name, photoUrl)
+        _notifyPhoto(name)
+      }
+    } catch {
+      for (const name of batch) { _photoCache.set(name, null); _notifyPhoto(name) }
+    }
+  }
+}
+
+function useWikiPhoto(name: string): string | null {
+  const [url, setUrl] = useState<string | null>(() => _photoCache.get(name) ?? null)
+  useEffect(() => {
+    if (_photoCache.has(name)) { setUrl(_photoCache.get(name) ?? null); return }
+    if (!_photoListeners.has(name)) _photoListeners.set(name, new Set())
+    const fn = () => setUrl(_photoCache.get(name) ?? null)
+    _photoListeners.get(name)!.add(fn)
+    return () => { _photoListeners.get(name)?.delete(fn) }
+  }, [name])
+  return url
+}
+
+// ─── PlayerPhoto ──────────────────────────────────────────────────────────────
+
+function PlayerPhoto({ url, position, large = false }: { url: string | null; position: string | null; large?: boolean }) {
+  const [failed, setFailed] = useState(false)
+  useEffect(() => setFailed(false), [url])
+  if (url && !failed) {
+    return (
+      <img
+        src={url}
+        alt=""
+        onError={() => setFailed(true)}
+        style={{
+          position: 'absolute', inset: 0, width: '100%', height: '100%',
+          objectFit: 'cover', objectPosition: 'top center',
+          borderRadius: large ? 0 : 0,
+        }}
+      />
+    )
+  }
+  return <span style={{ fontSize: large ? 100 : 64, opacity: .85, marginBottom: large ? 0 : 6 }}>{getAvatar(position)}</span>
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type TeamMeta = ReturnType<typeof getTeamMeta>
@@ -143,6 +221,8 @@ function StickerCard({
   onToggleDup: (e: React.MouseEvent) => void
   onZoom: (e: React.MouseEvent) => void
 }) {
+  const photoUrl = useWikiPhoto(stat.player_name)
+
   function handleClick() {
     if (!collected) onCollect()
     else onFlip()
@@ -191,15 +271,14 @@ function StickerCard({
             )}
           </div>
 
-          {/* Photo placeholder */}
+          {/* Photo area */}
           <div style={{
             position: 'absolute', top: 46, left: 8, right: 8, bottom: 54,
             borderRadius: 8,
             background: 'repeating-linear-gradient(135deg,rgba(0,0,0,.04) 0 8px,rgba(0,0,0,.08) 8px 16px)',
             display: 'flex', alignItems: 'flex-end', justifyContent: 'center', overflow: 'hidden',
           }}>
-            <span style={{ fontSize: 64, opacity: .85, marginBottom: 6 }}>{getAvatar(stat.position)}</span>
-            <span style={{ position: 'absolute', top: 8, left: 8, fontFamily: "'Roboto Mono',monospace", fontSize: 8, color: 'rgba(0,0,0,.3)', letterSpacing: .5 }}>PHOTO</span>
+            <PlayerPhoto url={photoUrl} position={stat.position} />
           </div>
 
           {/* Name / position */}
@@ -316,14 +395,21 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
     const PAGE = 200
     api.getStats({ year, sort: '-goals' }, 0, PAGE).then(async first => {
       const pages = Math.ceil(first.total / PAGE)
-      if (pages <= 1) { setStats(first.items); setLoading(false); return }
+      if (pages <= 1) {
+        setStats(first.items)
+        setLoading(false)
+        batchFetchPhotos(first.items.map(s => s.player_name))
+        return
+      }
       const rest = await Promise.all(
         Array.from({ length: pages - 1 }, (_, i) =>
           api.getStats({ year, sort: '-goals' }, i + 1, PAGE).then(p => p.items)
         )
       )
-      setStats([...first.items, ...rest.flat()])
+      const all = [...first.items, ...rest.flat()]
+      setStats(all)
       setLoading(false)
+      batchFetchPhotos(all.map(s => s.player_name))
     }).catch(() => setLoading(false))
   }, [year])
 
@@ -382,6 +468,7 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
   const pct = total ? Math.round((collectedCount / total) * 100) : 0
 
   const zoomedStat = zoomId != null ? stats.find(s => s.player_id === zoomId) ?? null : null
+  const zoomedPhoto = useWikiPhoto(zoomedStat?.player_name ?? '')
 
   return (
     <div style={{ minHeight: '100vh', background: '#0e1430', fontFamily: 'Roboto,system-ui,sans-serif', color: '#0e1430' }}>
@@ -524,9 +611,9 @@ export function AlbumPage({ initialYear, tournaments }: Props) {
                     <span style={{ fontFamily: 'Poppins,sans-serif', fontWeight: 800, fontSize: 34, color: '#fff', textShadow: '0 2px 4px rgba(0,0,0,.3)' }}>#{zoomedStat.jersey_number}</span>
                   )}
                 </div>
-                {/* Large avatar */}
-                <div style={{ position: 'absolute', top: '18%', left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 2 }}>
-                  <span style={{ fontSize: 120 }}>{getAvatar(zoomedStat.position)}</span>
+                {/* Large photo / avatar */}
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '46%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
+                  <PlayerPhoto url={zoomedPhoto} position={zoomedStat.position} large />
                 </div>
                 {/* Info panel */}
                 <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '54%', background: '#fff', borderRadius: '20px 20px 0 0', padding: '22px 20px' }}>
